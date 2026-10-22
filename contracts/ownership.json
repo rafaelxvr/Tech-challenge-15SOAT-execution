@@ -1,0 +1,149 @@
+{
+  "schemaVersion": 1,
+  "types": {
+    "envelope": {
+      "kind": "ENVELOPE",
+      "owner": "os",
+      "answers": null,
+      "passo": null
+    },
+    "IniciarDiagnostico": {
+      "kind": "COMMAND",
+      "owner": "execution",
+      "answers": null,
+      "passo": 1
+    },
+    "IniciarReparo": {
+      "kind": "COMMAND",
+      "owner": "execution",
+      "answers": null,
+      "passo": 6
+    },
+    "CancelarExecucao": {
+      "kind": "COMMAND",
+      "owner": "execution",
+      "answers": null,
+      "passo": 4
+    },
+    "GerarOrcamento": {
+      "kind": "COMMAND",
+      "owner": "billing",
+      "answers": null,
+      "passo": 2
+    },
+    "RegistrarDecisao": {
+      "kind": "COMMAND",
+      "owner": "billing",
+      "answers": null,
+      "passo": 3
+    },
+    "CancelarOrcamento": {
+      "kind": "COMMAND",
+      "owner": "billing",
+      "answers": null,
+      "passo": 4
+    },
+    "EstornarPagamento": {
+      "kind": "COMMAND",
+      "owner": "billing",
+      "answers": null,
+      "passo": 4
+    },
+    "DiagnosticoConcluido": {
+      "kind": "REPLY",
+      "owner": "execution",
+      "answers": "IniciarDiagnostico",
+      "passo": 1
+    },
+    "DiagnosticoRecusado": {
+      "kind": "REPLY",
+      "owner": "execution",
+      "answers": "IniciarDiagnostico",
+      "passo": 1
+    },
+    "ReparoIniciado": {
+      "kind": "REPLY",
+      "owner": "execution",
+      "answers": "IniciarReparo",
+      "passo": 6
+    },
+    "ReparoRecusado": {
+      "kind": "REPLY",
+      "owner": "execution",
+      "answers": "IniciarReparo",
+      "passo": 6
+    },
+    "ExecucaoFinalizada": {
+      "kind": "REPLY",
+      "owner": "execution",
+      "answers": "IniciarReparo",
+      "passo": 6
+    },
+    "ExecucaoCancelada": {
+      "kind": "REPLY",
+      "owner": "execution",
+      "answers": "CancelarExecucao",
+      "passo": 4
+    },
+    "OrcamentoGerado": {
+      "kind": "REPLY",
+      "owner": "billing",
+      "answers": "GerarOrcamento",
+      "passo": 2
+    },
+    "OrcamentoFalhou": {
+      "kind": "REPLY",
+      "owner": "billing",
+      "answers": "GerarOrcamento",
+      "passo": 2
+    },
+    "OrcamentoAprovado": {
+      "kind": "REPLY",
+      "owner": "billing",
+      "answers": "RegistrarDecisao",
+      "passo": 3
+    },
+    "OrcamentoRecusado": {
+      "kind": "REPLY",
+      "owner": "billing",
+      "answers": "RegistrarDecisao",
+      "passo": 3
+    },
+    "PagamentoConfirmado": {
+      "kind": "REPLY",
+      "owner": "billing",
+      "answers": "RegistrarDecisao",
+      "passo": 3
+    },
+    "PagamentoRecusado": {
+      "kind": "REPLY",
+      "owner": "billing",
+      "answers": "RegistrarDecisao",
+      "passo": 3
+    },
+    "PagamentoExpirado": {
+      "kind": "REPLY",
+      "owner": "billing",
+      "answers": "RegistrarDecisao",
+      "passo": 3
+    },
+    "OrcamentoCancelado": {
+      "kind": "REPLY",
+      "owner": "billing",
+      "answers": "CancelarOrcamento",
+      "passo": 4
+    },
+    "PagamentoEstornado": {
+      "kind": "REPLY",
+      "owner": "billing",
+      "answers": "EstornarPagamento",
+      "passo": 4
+    },
+    "CompensacaoFalhou": {
+      "kind": "REPLY",
+      "owner": "billing|execution",
+      "answers": "CancelarOrcamento|EstornarPagamento|CancelarExecucao",
+      "passo": 4
+    }
+  }
+}
