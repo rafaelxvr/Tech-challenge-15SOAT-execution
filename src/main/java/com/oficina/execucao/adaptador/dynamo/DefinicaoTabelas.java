@@ -21,6 +21,11 @@ public final class DefinicaoTabelas {
 
     private DefinicaoTabelas() {}
 
+    /** Key of the outbox item that lists, in commit order, the not yet published messageIds of an order. */
+    public static String chaveFila(String osId) {
+        return "FILA#" + osId;
+    }
+
     public static void criarSeAusente(DynamoDbClient dynamo, NomesTabelas nomes) {
         criar(dynamo, CreateTableRequest.builder().tableName(nomes.execucoes()).billingMode(BillingMode.PAY_PER_REQUEST)
                 .attributeDefinitions(atributo("execucaoId", ScalarAttributeType.S), atributo("filaChave", ScalarAttributeType.S),
