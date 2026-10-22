@@ -5,7 +5,10 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import java.util.List;
 
 @ConfigurationProperties(prefix = "execucao")
-public record ExecucaoProperties(List<String> filiais, Capacidade capacidade, Mensageria mensageria, Dynamodb dynamodb) {
+public record ExecucaoProperties(Modo modo, List<String> filiais, Capacidade capacidade, Mensageria mensageria, Dynamodb dynamodb) {
+    /** Where the AWS clients point: local emulator with static test credentials, or the real cloud through IRSA. */
+    public enum Modo { LOCALSTACK, IRSA }
+
     public record Capacidade(int reparosPorFilial) {}
 
     public record Mensageria(boolean enabled, String region, String endpoint, String filaComandos, String filaRespostas) {}

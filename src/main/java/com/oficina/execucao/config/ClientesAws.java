@@ -39,10 +39,11 @@ public final class ClientesAws implements AutoCloseable {
         SdkHttpClient http = UrlConnectionHttpClient.builder().connectionTimeout(Duration.ofSeconds(1))
                 .socketTimeout(Duration.ofSeconds(15)).build();
         recursos.add(http);
+        ValidadorConfiguracaoAws.validar(p, roleArn, tokenFile);
         String dynamoEndpoint = p.dynamodb().endpoint();
         String sqsEndpoint = p.mensageria().endpoint();
         AwsCredentialsProvider irsa = null;
-        if (vazio(dynamoEndpoint) || vazio(sqsEndpoint)) {
+        if (p.modo() == ExecucaoProperties.Modo.IRSA) {
             // AssumeRoleWithWebIdentity is unsigned. Never recurse into the default credentials chain.
             StsClient sts = StsClient.builder().region(Region.of(p.dynamodb().region()))
                     .credentialsProvider(AnonymousCredentialsProvider.create()).httpClient(http)
