@@ -1,30 +1,29 @@
 package com.oficina.execucao;
 
-import org.junit.jupiter.api.Assertions;
+import com.oficina.execucao.aplicacao.porta.RegistroExecucoes;
+import com.oficina.execucao.support.LocalStackSupport;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.http.HttpStatus;
+import org.springframework.boot.test.web.client.TestRestTemplate;
 
-import java.util.Map;
+import java.util.UUID;
+
+import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest(classes = ExecutionApplication.class, webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-class ExecutionApplicationTest {
+class ExecutionApplicationTest extends LocalStackSupport {
+    @Autowired TestRestTemplate http;
+    @Autowired RegistroExecucoes registro;
 
-    @LocalServerPort
-    private int port;
+    @Test void healthRespondeUpSobContextPath() {
+        assertThat(http.getRestTemplate().getUriTemplateHandler().expand("/x").getPath()).isEqualTo("/execucao/x");
+        var resposta = http.getForEntity("/actuator/health", String.class);
+        assertThat(resposta.getStatusCode().value()).isEqualTo(200);
+        assertThat(resposta.getBody()).contains("\"status\":\"UP\"");
+    }
 
-    @Autowired
-    private TestRestTemplate restTemplate;
-
-    @Test
-    void healthEndpointIsAvailableUnderExecutionContext() {
-        var response = restTemplate.getForEntity(
-                "http://localhost:" + port + "/execucao/actuator/health", Map.class);
-
-        Assertions.assertEquals(HttpStatus.OK, response.getStatusCode());
-        Assertions.assertEquals("UP", response.getBody().get("status"));
+    @Test void tabelasLocaisCriadasERegistroResponde() {
+        assertThat(registro.porOs(UUID.randomUUID())).isEmpty();
     }
 }
