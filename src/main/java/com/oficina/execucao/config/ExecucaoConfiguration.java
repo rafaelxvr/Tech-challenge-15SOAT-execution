@@ -3,6 +3,8 @@ package com.oficina.execucao.config;
 import com.oficina.execucao.adaptador.dynamo.DefinicaoTabelas;
 import com.oficina.execucao.adaptador.dynamo.DynamoRegistroExecucoes;
 import com.oficina.execucao.adaptador.dynamo.NomesTabelas;
+import com.oficina.execucao.aplicacao.AcoesMecanico;
+import com.oficina.execucao.aplicacao.ConsultasExecucao;
 import com.oficina.execucao.aplicacao.porta.RegistroExecucoes;
 import com.oficina.execucao.dominio.CapacidadeOficina;
 import com.oficina.execucao.dominio.Filiais;
@@ -44,5 +46,14 @@ public class ExecucaoConfiguration {
                                               Clock clock, ExecucaoProperties propriedades) {
         if (propriedades.dynamodb().criarTabelas()) DefinicaoTabelas.criarSeAusente(clientes.dynamo(), nomes);
         return new DynamoRegistroExecucoes(clientes.dynamo(), nomes, mapeador, clock);
+    }
+
+    @Bean AcoesMecanico acoesMecanico(RegistroExecucoes registro, FabricaRespostas respostas, CapacidadeOficina capacidade,
+                                      Clock clock) {
+        return new AcoesMecanico(registro, respostas, capacidade, clock);
+    }
+
+    @Bean ConsultasExecucao consultasExecucao(RegistroExecucoes registro, Filiais filiais) {
+        return new ConsultasExecucao(registro, filiais);
     }
 }

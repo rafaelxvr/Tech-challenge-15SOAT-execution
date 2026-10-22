@@ -31,6 +31,15 @@ public abstract class LocalStackSupport {
     private static final StaticCredentialsProvider CREDENCIAIS =
             StaticCredentialsProvider.create(AwsBasicCredentials.create("test", "test"));
 
+    static { aquecerDynamo(); }
+
+    /** The first DynamoDB call boots DynamoDB Local (seconds); absorb it here, not inside the 5 s app client timeout. */
+    private static void aquecerDynamo() {
+        try (DynamoDbClient cliente = dynamo()) {
+            cliente.listTables();
+        }
+    }
+
     public static DynamoDbClient dynamo() {
         return DynamoDbClient.builder().endpointOverride(LOCALSTACK.getEndpointOverride(DYNAMODB))
                 .region(Region.of(LOCALSTACK.getRegion())).credentialsProvider(CREDENCIAIS).build();
