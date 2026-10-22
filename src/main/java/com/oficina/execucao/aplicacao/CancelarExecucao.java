@@ -6,6 +6,7 @@ import com.oficina.execucao.aplicacao.porta.ResultadoGravacao;
 import com.oficina.execucao.dominio.CapacidadeOficina;
 import com.oficina.execucao.dominio.Execucao;
 import com.oficina.execucao.dominio.OrigemComando;
+import com.oficina.execucao.dominio.StatusExecucao;
 import com.oficina.execucao.mensagem.*;
 
 import java.time.Clock;
@@ -13,7 +14,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.stream.Collectors;
 
-/** Saga compensation: idempotent by osId; always answers ExecucaoCancelada with how many jobs it stopped. */
+/** Saga compensation: idempotent by osId; always answers ExecucaoCancelada with how many jobs of the OS are cancelled, so a repeat repeats the answer. */
 public class CancelarExecucao {
     static final int TENTATIVAS = 3;
     private final RegistroExecucoes registro;
@@ -46,7 +47,9 @@ public class CancelarExecucao {
 
     private ResultadoGravacao tentar(Envelope comando, OrigemComando origem, Gravacao.MarcaInbox inbox) {
         Instant agora = clock.instant();
-        List<Execucao> ativas = registro.porOs(comando.osId()).stream().filter(e -> e.status().ativa()).toList();
+        List<Execucao> todas = registro.porOs(comando.osId());
+        List<Execucao> ativas = todas.stream().filter(e -> e.status().ativa()).toList();
+        long jaCanceladas = todas.stream().filter(e -> e.status() == StatusExecucao.CANCELADA).count();
         var vagasPorFilial = ativas.stream().filter(Execucao::ocupaVaga)
                 .collect(Collectors.groupingBy(Execucao::filialId, Collectors.counting()));
         ativas.forEach(e -> e.cancelar(agora));
@@ -54,6 +57,6 @@ public class CancelarExecucao {
                 .map(v -> new Gravacao.AjusteCapacidade(v.getKey(), -v.getValue().intValue(), capacidade.limite()))
                 .orElse(null);
         return registro.gravar(new Gravacao(inbox, liberacao, ativas, respostas.responder(origem, comando.osId(),
-                TiposMensagem.EXECUCAO_CANCELADA, PayloadsResposta.execucaoCancelada(ativas.size()))));
+                TiposMensagem.EXECUCAO_CANCELADA, PayloadsResposta.execucaoCancelada(ativas.size() + (int) jaCanceladas))));
     }
 }
