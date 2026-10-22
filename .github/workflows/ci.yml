@@ -17,6 +17,9 @@ jobs:
   build-and-test:
     name: Build and test (Java 17)
     runs-on: ubuntu-latest
+    env:
+      # Identificador do conjunto de contratos v1 (sha256 de contracts/CONTRACTS.sha256); igual nos tres repositorios.
+      CONTRACT_SET_SHA256: 35d863ecc103d4b4ff271004ac21626cbead715de008479381810cb57440e5b0
     steps:
       - name: Checkout
         uses: actions/checkout@v4

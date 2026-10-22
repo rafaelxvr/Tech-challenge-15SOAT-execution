@@ -1,0 +1,17 @@
+{
+  "messageId": "00000105-0000-4000-8000-000000000105",
+  "kind": "COMMAND",
+  "type": "RegistrarDecisao",
+  "schemaVersion": 1,
+  "sagaId": "00000002-0000-4000-8000-000000000002",
+  "osId": "00000003-0000-4000-8000-000000000003",
+  "passo": 3,
+  "causationId": null,
+  "occurredAt": "2026-10-22T12:00:00Z",
+  "correlationId": "00000004-0000-4000-8000-000000000004",
+  "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+  "payload": {
+    "versaoOrcamento": 1,
+    "decisao": "APROVADO"
+  }
+}

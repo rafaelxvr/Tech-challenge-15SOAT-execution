@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["orcamentoId", "total"],
+  "properties": {
+    "orcamentoId": {"type": "string", "format": "uuid"},
+    "total": {"type": "number", "minimum": 0}
+  },
+  "additionalProperties": false
+}
