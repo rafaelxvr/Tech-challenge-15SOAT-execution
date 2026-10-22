@@ -14,7 +14,8 @@ public final class PayloadsResposta {
     private PayloadsResposta() {}
 
     public static ObjectNode diagnosticoConcluido(UUID execucaoId) { return F.objectNode().put("execucaoId", execucaoId.toString()); }
-    public static ObjectNode diagnosticoRecusado(MotivoRecusa motivo) { return F.objectNode().put("motivo", motivo.name()); }
+    /** Contract v1 allows only FILIAL_DESCONHECIDA for a refused diagnosis; capacity applies to repairs only. */
+    public static ObjectNode diagnosticoRecusado() { return F.objectNode().put("motivo", MotivoRecusa.FILIAL_DESCONHECIDA.name()); }
     public static ObjectNode reparoIniciado(UUID execucaoId) { return F.objectNode().put("execucaoId", execucaoId.toString()); }
     public static ObjectNode reparoRecusado(MotivoRecusa motivo) { return F.objectNode().put("motivo", motivo.name()); }
 

@@ -58,12 +58,16 @@ class ContratosTest {
         }
     }
 
+    @Test void diagnosticoRecusadoSoEmiteFilialDesconhecida() {
+        assertThat(PayloadsResposta.diagnosticoRecusado().get("motivo").asText()).isEqualTo("FILIAL_DESCONHECIDA");
+    }
+
     @Test void respostasProduzidasRespeitamContratos() throws Exception {
         var origem = new OrigemComando(UUID.randomUUID(), UUID.randomUUID(), 6, UUID.randomUUID().toString(), null);
         UUID id = UUID.randomUUID();
         Map<String, ObjectNode> respostas = Map.of(
                 TiposMensagem.DIAGNOSTICO_CONCLUIDO, PayloadsResposta.diagnosticoConcluido(id),
-                TiposMensagem.DIAGNOSTICO_RECUSADO, PayloadsResposta.diagnosticoRecusado(MotivoRecusa.FILIAL_DESCONHECIDA),
+                TiposMensagem.DIAGNOSTICO_RECUSADO, PayloadsResposta.diagnosticoRecusado(),
                 TiposMensagem.REPARO_INICIADO, PayloadsResposta.reparoIniciado(id),
                 TiposMensagem.REPARO_RECUSADO, PayloadsResposta.reparoRecusado(MotivoRecusa.CAPACIDADE_ESGOTADA),
                 TiposMensagem.EXECUCAO_FINALIZADA, PayloadsResposta.execucaoFinalizada(id, T),
