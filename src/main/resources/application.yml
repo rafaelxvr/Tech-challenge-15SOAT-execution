@@ -33,3 +33,11 @@ execucao:
     tabela-outbox: ${EXECUCAO_TABELA_OUTBOX:execucao-outbox}
     tabela-inbox: ${EXECUCAO_TABELA_INBOX:execucao-inbox}
     criar-tabelas: ${EXECUCAO_CRIAR_TABELAS:false}
+
+security:
+  jwt:
+    secret: ${JWT_SECRET}
+    staff:
+      issuer: ${JWT_STAFF_ISSUER}
+      audience: ${JWT_STAFF_AUDIENCE}
+      key-id: ${JWT_STAFF_KEY_ID}
