@@ -50,6 +50,7 @@ public abstract class LocalStackSupport {
 
     @DynamicPropertySource
     static void propriedades(DynamicPropertyRegistry r) {
+        r.add("execucao.modo", () -> "LOCALSTACK");
         r.add("execucao.dynamodb.region", LOCALSTACK::getRegion);
         r.add("execucao.dynamodb.endpoint", () -> LOCALSTACK.getEndpointOverride(DYNAMODB).toString());
         r.add("execucao.dynamodb.tabela-execucoes", () -> PREFIXO_CONTEXTO + "-execucoes");
