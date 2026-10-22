@@ -44,7 +44,7 @@ public final class DefinicaoTabelas {
         try {
             dynamo.createTable(pedido);
         } catch (ResourceInUseException jaExiste) {
-            return;
+            // Outra inicialização pode ainda estar criando a tabela: aguarda ACTIVE antes de seguir.
         }
         dynamo.waiter().waitUntilTableExists(b -> b.tableName(pedido.tableName()));
     }
