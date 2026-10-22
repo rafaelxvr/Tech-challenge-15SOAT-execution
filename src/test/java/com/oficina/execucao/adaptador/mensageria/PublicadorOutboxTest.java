@@ -66,7 +66,7 @@ class PublicadorOutboxTest extends LocalStackSupport {
     @Test void publicaComGrupoEDedupEMarcaPublicado() {
         UUID os = UUID.randomUUID();
         var r = resposta(os, "ReparoIniciado");
-        var publicador = new PublicadorOutbox(dynamo, nomes, new SqsEnviadorMensagens(sqs, fila), CLOCK, new BackoffPublicacao(b -> 0), Duration.ZERO);
+        var publicador = new PublicadorOutbox(dynamo, nomes, new SqsEnviadorMensagens(sqs, fila), CLOCK, new BackoffPublicacao(b -> 0));
         drenar(publicador);
         var recebidas = sqs.receiveMessage(ReceiveMessageRequest.builder().queueUrl(fila).maxNumberOfMessages(10)
                 .waitTimeSeconds(2).messageSystemAttributeNames(MessageSystemAttributeName.MESSAGE_GROUP_ID,
@@ -86,10 +86,10 @@ class PublicadorOutboxTest extends LocalStackSupport {
         var segunda = resposta(os, "ExecucaoFinalizada");
         List<UUID> enviadas = new ArrayList<>();
         var falhando = new PublicadorOutbox(dynamo, nomes, (o, id, corpo) -> { throw new IllegalStateException("x"); },
-                CLOCK, new BackoffPublicacao(b -> 0), Duration.ZERO);
+                CLOCK, new BackoffPublicacao(b -> 0));
         while (item(primeira.messageId()).get("tentativas").n().equals("0")) falhando.publicarProximo();
         var publicador = new PublicadorOutbox(dynamo, nomes, (o, id, corpo) -> { enviadas.add(id); return "ok-" + id; },
-                CLOCK, new BackoffPublicacao(b -> 0), Duration.ZERO);
+                CLOCK, new BackoffPublicacao(b -> 0));
         drenar(publicador);
         assertThat(enviadas).doesNotContain(segunda.messageId());
         assertThat(item(primeira.messageId()).get("ultimoErro").s()).isEqualTo("QUEUE_SEND_FAILED");
@@ -105,20 +105,46 @@ class PublicadorOutboxTest extends LocalStackSupport {
                     .key(Map.of("messageId", AttributeValue.fromS(id.toString())))
                     .updateExpression("SET estado = :p").expressionAttributeValues(Map.of(":p", AttributeValue.fromS("PUBLISHED"))));
             throw new IllegalStateException("x");
-        }, CLOCK, new BackoffPublicacao(b -> 0), Duration.ZERO);
+        }, CLOCK, new BackoffPublicacao(b -> 0));
         publicador.publicarProximo();
         assertThat(item(r.messageId()).get("estado").s()).isEqualTo("PUBLISHED");
     }
 
-    @Test void naoPublicaAntesDaJanelaDeAssentamento() {
-        var r = resposta(UUID.randomUUID(), "ReparoIniciado");
+    @Test void filaDaOsRegistraEmOrdemDeCommitEEsvaziaAoPublicar() {
+        UUID os = UUID.randomUUID();
+        var primeira = resposta(os, "ReparoIniciado");
+        var segunda = resposta(os, "ExecucaoFinalizada");
+        var chave = Map.of("messageId", AttributeValue.fromS(DefinicaoTabelas.chaveFila(os.toString())));
+        var antes = dynamo.getItem(b -> b.tableName(nomes.outbox()).consistentRead(true).key(chave)).item().get("fila").l();
+        assertThat(antes).extracting(AttributeValue::s).containsExactly(primeira.messageId().toString(), segunda.messageId().toString());
+        drenar(new PublicadorOutbox(dynamo, nomes, (o, id, corpo) -> "ok-" + id, CLOCK, new BackoffPublicacao(b -> 0)));
+        assertThat(dynamo.getItem(b -> b.tableName(nomes.outbox()).consistentRead(true).key(chave)).item().get("fila").l()).isEmpty();
+    }
+
+    @Test void itemForaDaCabecaDaFilaNaoEPublicadoMesmoVisivelNoIndice() {
+        UUID os = UUID.randomUUID();
+        var primeira = resposta(os, "ReparoIniciado");
+        var segunda = resposta(os, "ExecucaoFinalizada");
+        // a primeira nao aparece no indice de pendentes (propagacao atrasada), mas continua na cabeca da fila
+        dynamo.updateItem(b -> b.tableName(nomes.outbox())
+                .key(Map.of("messageId", AttributeValue.fromS(primeira.messageId().toString())))
+                .updateExpression("SET estado = :x").expressionAttributeValues(Map.of(":x", AttributeValue.fromS("INVISIVEL"))));
         List<UUID> enviadas = new ArrayList<>();
         var publicador = new PublicadorOutbox(dynamo, nomes, (o, id, corpo) -> { enviadas.add(id); return "ok"; },
-                CLOCK, new BackoffPublicacao(b -> 0), Duration.ofSeconds(2));
-        assertThat(publicador.publicarProximo()).isFalse();
-        AGORA.set(AGORA.get().plusSeconds(3));
+                CLOCK, new BackoffPublicacao(b -> 0));
+        drenar(publicador);
+        assertThat(enviadas).doesNotContain(segunda.messageId());
+    }
+
+    @Test void falhaComTentativaDesatualizadaNaoRegride() {
+        var r = resposta(UUID.randomUUID(), "ReparoIniciado");
+        var publicador = new PublicadorOutbox(dynamo, nomes, (o, id, corpo) -> {
+            dynamo.updateItem(b -> b.tableName(nomes.outbox()).key(Map.of("messageId", AttributeValue.fromS(id.toString())))
+                    .updateExpression("SET tentativas = :t").expressionAttributeValues(Map.of(":t", AttributeValue.fromN("5"))));
+            throw new IllegalStateException("x");
+        }, CLOCK, new BackoffPublicacao(b -> 0));
         publicador.publicarProximo();
-        assertThat(enviadas).contains(r.messageId());
+        assertThat(item(r.messageId()).get("tentativas").n()).isEqualTo("5");
     }
 
     @Test void pagina_alemDosPrimeirosCandidatosBloqueados() {
@@ -132,7 +158,7 @@ class PublicadorOutboxTest extends LocalStackSupport {
             AGORA.set(AGORA.get().plusMillis(1));
         }
         // 30 OS livres depois da fila bloqueada: o primeiro item da OS bloqueadora é BLOCKED
-        var primeiro = dynamo.scan(b -> b.tableName(tabelasLocais.outbox())).items().stream()
+        var primeiro = dynamo.scan(b -> b.tableName(tabelasLocais.outbox())).items().stream().filter(m -> m.containsKey("sequencia"))
                 .min(Comparator.comparing(m -> Long.parseLong(m.get("sequencia").n()))).orElseThrow();
         dynamo.updateItem(b -> b.tableName(tabelasLocais.outbox()).key(Map.of("messageId", primeiro.get("messageId")))
                 .updateExpression("SET estado = :b").expressionAttributeValues(Map.of(":b", AttributeValue.fromS("BLOCKED"))));
@@ -146,7 +172,7 @@ class PublicadorOutboxTest extends LocalStackSupport {
         }
         List<UUID> enviadas = new ArrayList<>();
         var publicador = new PublicadorOutbox(dynamo, tabelasLocais, (o, id, corpo) -> { enviadas.add(id); return "ok"; },
-                CLOCK, new BackoffPublicacao(b -> 0), Duration.ZERO);
+                CLOCK, new BackoffPublicacao(b -> 0));
         drenar(publicador);
         assertThat(enviadas).containsExactlyInAnyOrderElementsOf(livres);
     }

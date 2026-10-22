@@ -84,7 +84,10 @@ public class DynamoRegistroExecucoes implements RegistroExecucoes {
             itens.add(capacidade(g.capacidade()));
         }
         g.execucoes().forEach(e -> itens.add(execucao(e.dados())));
-        if (g.resposta() != null) itens.add(outbox(g.resposta(), agora));
+        if (g.resposta() != null) {
+            itens.add(outbox(g.resposta(), agora));
+            itens.add(filaDaOs(g.resposta()));
+        }
         if (itens.isEmpty()) return ResultadoGravacao.GRAVADO;
         try {
             dynamo.transactWriteItems(b -> b.transactItems(itens));
@@ -153,6 +156,15 @@ public class DynamoRegistroExecucoes implements RegistroExecucoes {
         item.put("corpo", s(corpo));
         return TransactWriteItem.builder().put(Put.builder().tableName(tabelas.outbox()).item(item)
                 .conditionExpression("attribute_not_exists(messageId)").build()).build();
+    }
+
+    /** Appends the reply to the per-order queue; the publisher only sends its head, read strongly from the base table. */
+    private TransactWriteItem filaDaOs(Envelope resposta) {
+        return TransactWriteItem.builder().update(Update.builder().tableName(tabelas.outbox())
+                .key(Map.of("messageId", s(DefinicaoTabelas.chaveFila(resposta.osId().toString()))))
+                .updateExpression("SET fila = list_append(if_not_exists(fila, :vazia), :m)")
+                .expressionAttributeValues(Map.of(":vazia", AttributeValue.fromL(List.of()),
+                        ":m", AttributeValue.fromL(List.of(s(resposta.messageId().toString()))))).build()).build();
     }
 
     private static boolean falhou(List<CancellationReason> motivos, int indice) {
