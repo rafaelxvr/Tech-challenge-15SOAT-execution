@@ -19,19 +19,49 @@ for expected in \
   'readOnlyRootFilesystem: true'; do
   grep -qF "$expected" <<<"$rendered" || { echo "faltando: $expected"; exit 1; }
 done
-# S-10: endurecimento do contêiner e imagens base fixadas por digest.
-for hardening in \
-  'runAsNonRoot: true' \
-  'allowPrivilegeEscalation: false' \
-  '- ALL' \
-  'type: RuntimeDefault' \
-  'automountServiceAccountToken: false' \
-  'limits:'; do
-  grep -qF -- "$hardening" <<<"$rendered" || { echo "S-10 faltando: $hardening"; exit 1; }
-done
-while read -r from_line; do
-  grep -Eq '@sha256:[0-9a-f]{64}' <<<"$from_line" || { echo "S-10: FROM sem digest: $from_line"; exit 1; }
-done < <(grep -E '^FROM ' "$root/Dockerfile")
+# S-10: endurecimento por contêiner/ServiceAccount e imagens base fixadas por digest (checagem estrutural).
+# shellcheck source=scripts/tests/s10-contract.lib.sh
+source "$root/scripts/tests/s10-contract.lib.sh"
+s10_check_deployment "$rendered" || exit 1
+s10_check_serviceaccount "$rendered" || exit 1
+s10_check_dockerfile "$root/Dockerfile" || exit 1
+# Regressões negativas: mutações que um grep global aceitaria precisam falhar.
+mut="$(mktemp -d)"; trap 'rm -rf "$mut"' EXIT
+expect_fail() { # $1 descrição; demais: comando
+  local d="$1"; shift
+  if "$@" 2>/dev/null; then echo "S-10: mutação aceita (deveria falhar): $d"; exit 1; fi
+}
+sidecar="${rendered/$'      containers:
+'/$'      containers:
+      - image: busybox
+        name: sidecar
+'}"
+expect_fail "sidecar sem endurecimento" s10_check_deployment "$sidecar"
+decoy="$(sed 's/allowPrivilegeEscalation: false/allowPrivilegeEscalation: true/' <<<"$rendered")
+---
+kind: ConfigMap
+data:
+  decoy: |
+    allowPrivilegeEscalation: false"
+expect_fail "controle só em ConfigMap" s10_check_deployment "$decoy"
+sa_decoy="$(sed 's/^automountServiceAccountToken: false$/automountServiceAccountToken: true/' <<<"$rendered")
+---
+kind: ConfigMap
+data:
+  decoy: automountServiceAccountToken: false"
+expect_fail "automount só em ConfigMap" s10_check_serviceaccount "$sa_decoy"
+digest="@sha256:$(printf '0%.0s' $(seq 64))"
+printf 'from alpine:3
+' > "$mut/lower"
+expect_fail "from minúsculo sem digest" s10_check_dockerfile "$mut/lower"
+printf 'FROM alpine:3 # %s
+FROM alpine%s
+' "$digest" "$digest" > "$mut/comment"
+expect_fail "digest só em comentário" s10_check_dockerfile "$mut/comment"
+printf '# sem FROM
+RUN true
+' > "$mut/none"
+expect_fail "zero FROM" s10_check_dockerfile "$mut/none"
 if grep -Eq 'amazonaws\.com|eks\.amazonaws|arn:aws|JWT_SECRET: ' <<<"$rendered"; then
   echo "referência AWS ou segredo literal encontrada"; exit 1
 fi
