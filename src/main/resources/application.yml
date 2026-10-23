@@ -13,3 +13,31 @@ management:
       probes:
         enabled: true
       show-details: never
+
+execucao:
+  # LOCALSTACK or IRSA; no default on purpose, so a missing value aborts startup instead of guessing.
+  modo: ${EXECUCAO_AWS_MODO:}
+  filiais: ${EXECUCAO_FILIAIS:MATRIZ}
+  capacidade:
+    reparos-por-filial: ${EXECUCAO_CAPACIDADE_REPAROS:5}
+  mensageria:
+    enabled: ${EXECUCAO_MENSAGERIA_ENABLED:false}
+    region: ${AWS_REGION:us-east-1}
+    endpoint: ${EXECUCAO_SQS_ENDPOINT:}
+    fila-comandos: ${EXECUCAO_FILA_COMANDOS:}
+    fila-respostas: ${EXECUCAO_FILA_RESPOSTAS:}
+  dynamodb:
+    region: ${AWS_REGION:us-east-1}
+    endpoint: ${EXECUCAO_DYNAMODB_ENDPOINT:}
+    tabela-execucoes: ${EXECUCAO_TABELA_EXECUCOES:execucoes}
+    tabela-outbox: ${EXECUCAO_TABELA_OUTBOX:execucao-outbox}
+    tabela-inbox: ${EXECUCAO_TABELA_INBOX:execucao-inbox}
+    criar-tabelas: ${EXECUCAO_CRIAR_TABELAS:false}
+
+security:
+  jwt:
+    secret: ${JWT_SECRET}
+    staff:
+      issuer: ${JWT_STAFF_ISSUER}
+      audience: ${JWT_STAFF_AUDIENCE}
+      key-id: ${JWT_STAFF_KEY_ID}
