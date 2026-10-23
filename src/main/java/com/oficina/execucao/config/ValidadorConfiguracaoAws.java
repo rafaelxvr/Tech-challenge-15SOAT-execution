@@ -3,9 +3,11 @@ package com.oficina.execucao.config;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
+import java.net.URI;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.regex.Pattern;
 
 /**
@@ -15,6 +17,9 @@ import java.util.regex.Pattern;
  */
 final class ValidadorConfiguracaoAws {
     private static final Pattern ROLE_ARN = Pattern.compile("^arn:aws[a-z-]*:iam::\\d{12}:role/[\\w+=,.@/-]+$");
+
+    /** S-3: the only hosts a local/Kind endpoint may point at: loopback (host tests) or LocalStack inside the cluster. */
+    private static final Set<String> HOSTS_PERMITIDOS = Set.of("localhost", "127.0.0.1", "[::1]", "localstack.infra.svc");
 
     private ValidadorConfiguracaoAws() {}
 
@@ -33,8 +38,24 @@ final class ValidadorConfiguracaoAws {
     }
 
     private static void validarLocalstack(ExecucaoProperties p, List<String> erros) {
-        if (vazio(p.dynamodb().endpoint())) erros.add("execucao.dynamodb.endpoint e obrigatorio");
-        if (vazio(p.mensageria().endpoint())) erros.add("execucao.mensageria.endpoint e obrigatorio");
+        validarEndpointLocal("execucao.dynamodb.endpoint", p.dynamodb().endpoint(), erros);
+        validarEndpointLocal("execucao.mensageria.endpoint", p.mensageria().endpoint(), erros);
+    }
+
+    private static void validarEndpointLocal(String propriedade, String endpoint, List<String> erros) {
+        if (vazio(endpoint)) {
+            erros.add(propriedade + " e obrigatorio");
+            return;
+        }
+        String host;
+        try {
+            host = URI.create(endpoint.trim()).getHost();
+        } catch (IllegalArgumentException e) {
+            host = null;
+        }
+        if (host == null || !HOSTS_PERMITIDOS.contains(host.toLowerCase())) {
+            erros.add(propriedade + " deve apontar para host local permitido (loopback ou localstack.infra.svc)");
+        }
     }
 
     private static void validarIrsa(ExecucaoProperties p, String roleArn, String tokenFile, List<String> erros) {
