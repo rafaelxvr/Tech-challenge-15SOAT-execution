@@ -88,6 +88,7 @@ Cobertura de branches: %.2f%%
           scanners: vuln
           severity: HIGH,CRITICAL
           ignore-unfixed: true
+          trivy-config: trivy.yaml
           exit-code: '1'
           format: table
 
