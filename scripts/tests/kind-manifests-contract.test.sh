@@ -19,6 +19,19 @@ for expected in \
   'readOnlyRootFilesystem: true'; do
   grep -qF "$expected" <<<"$rendered" || { echo "faltando: $expected"; exit 1; }
 done
+# S-10: endurecimento do contêiner e imagens base fixadas por digest.
+for hardening in \
+  'runAsNonRoot: true' \
+  'allowPrivilegeEscalation: false' \
+  '- ALL' \
+  'type: RuntimeDefault' \
+  'automountServiceAccountToken: false' \
+  'limits:'; do
+  grep -qF -- "$hardening" <<<"$rendered" || { echo "S-10 faltando: $hardening"; exit 1; }
+done
+while read -r from_line; do
+  grep -Eq '@sha256:[0-9a-f]{64}' <<<"$from_line" || { echo "S-10: FROM sem digest: $from_line"; exit 1; }
+done < <(grep -E '^FROM ' "$root/Dockerfile")
 if grep -Eq 'amazonaws\.com|eks\.amazonaws|arn:aws|JWT_SECRET: ' <<<"$rendered"; then
   echo "referência AWS ou segredo literal encontrada"; exit 1
 fi
