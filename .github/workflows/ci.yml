@@ -100,3 +100,13 @@ jobs:
         uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  manifests-contract:
+    name: Contrato dos manifests (S-10)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Contrato offline dos manifests Kind e do Dockerfile
+        run: bash scripts/tests/kind-manifests-contract.test.sh
