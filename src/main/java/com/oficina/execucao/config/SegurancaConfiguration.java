@@ -1,6 +1,7 @@
 package com.oficina.execucao.config;
 
 import com.oficina.execucao.seguranca.FiltroTokenStaff;
+import com.oficina.execucao.seguranca.PedidoSemCredencialAmbiente;
 import com.oficina.execucao.seguranca.PropriedadesJwt;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
@@ -9,7 +10,6 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
-import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.HttpStatusEntryPoint;
@@ -31,7 +31,7 @@ public class SegurancaConfiguration {
     }
 
     @Bean SecurityFilterChain cadeiaSeguranca(HttpSecurity http, FiltroTokenStaff filtro) throws Exception {
-        return http.csrf(AbstractHttpConfigurer::disable)
+        return http.csrf(c -> c.ignoringRequestMatchers(new PedidoSemCredencialAmbiente()))
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(a -> a.requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
                         .anyRequest().authenticated())

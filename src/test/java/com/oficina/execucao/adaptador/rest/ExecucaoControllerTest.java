@@ -81,4 +81,10 @@ class ExecucaoControllerTest extends LocalStackSupport {
         mvc.perform(get("/v3/api-docs")).andExpect(status().isUnauthorized());
         mvc.perform(get("/actuator/health")).andExpect(status().isOk());
     }
+
+    @Test void csrfSoSeAplicaAPedidoComCookieESemBearer() throws Exception {
+        UUID id = UUID.randomUUID();
+        mvc.perform(post("/{id}/iniciar", id)).andExpect(status().isUnauthorized());
+        mvc.perform(post("/{id}/iniciar", id).header("Cookie", "JSESSIONID=1")).andExpect(status().isForbidden());
+    }
 }
