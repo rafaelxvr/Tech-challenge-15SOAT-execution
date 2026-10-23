@@ -35,6 +35,12 @@ class ExecucaoControllerTest extends LocalStackSupport {
 
     static String bearer(String... papeis) { return "Bearer " + TokensTeste.staff(papeis); }
 
+    @Test void openApiAutenticadoDocumentaAsRotas() throws Exception {
+        mvc.perform(get("/v3/api-docs").header("Authorization", bearer("MECANICO")))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.openapi").exists())
+                .andExpect(jsonPath("$.paths['/fila']").exists());
+    }
+
     @Test void fluxoDoMecanico() throws Exception {
         UUID os = UUID.randomUUID();
         var e = diagnostico(os);
