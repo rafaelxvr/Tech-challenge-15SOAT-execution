@@ -7,11 +7,11 @@ metadata:
 data:
   EXECUCAO_AWS_MODO: LOCALSTACK
   AWS_REGION: us-east-1
-  EXECUCAO_DYNAMODB_ENDPOINT: http://localstack.infra.svc.cluster.local:4566
-  EXECUCAO_SQS_ENDPOINT: http://localstack.infra.svc.cluster.local:4566
+  EXECUCAO_DYNAMODB_ENDPOINT: http://localstack.infra.svc:4566
+  EXECUCAO_SQS_ENDPOINT: http://localstack.infra.svc:4566
   EXECUCAO_MENSAGERIA_ENABLED: "true"
-  EXECUCAO_FILA_COMANDOS: http://localstack.infra.svc.cluster.local:4566/000000000000/execution-commands.fifo
-  EXECUCAO_FILA_RESPOSTAS: http://localstack.infra.svc.cluster.local:4566/000000000000/os-saga-replies.fifo
+  EXECUCAO_FILA_COMANDOS: http://localstack.infra.svc:4566/000000000000/execution-commands.fifo
+  EXECUCAO_FILA_RESPOSTAS: http://localstack.infra.svc:4566/000000000000/os-saga-replies.fifo
   EXECUCAO_TABELA_EXECUCOES: oficina-phase4-execucoes
   EXECUCAO_TABELA_OUTBOX: oficina-phase4-execucao-outbox
   EXECUCAO_TABELA_INBOX: oficina-phase4-execucao-inbox
