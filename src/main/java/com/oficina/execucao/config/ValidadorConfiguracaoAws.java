@@ -47,14 +47,23 @@ final class ValidadorConfiguracaoAws {
             erros.add(propriedade + " e obrigatorio");
             return;
         }
-        String host;
-        try {
-            host = URI.create(endpoint.trim()).getHost();
-        } catch (IllegalArgumentException e) {
-            host = null;
-        }
-        if (host == null || !HOSTS_PERMITIDOS.contains(host.toLowerCase())) {
+        if (!hostLocalPermitido(endpoint)) {
             erros.add(propriedade + " deve apontar para host local permitido (loopback ou localstack.infra.svc)");
+        }
+    }
+
+    /** Same parser the SDK client receives (no trim): needs http/https scheme, no userinfo and an allowlisted host. */
+    private static boolean hostLocalPermitido(String endpoint) {
+        try {
+            URI uri = URI.create(endpoint);
+            String esquema = uri.getScheme();
+            boolean esquemaValido = "http".equalsIgnoreCase(esquema) || "https".equalsIgnoreCase(esquema);
+            return esquemaValido
+                    && uri.getUserInfo() == null
+                    && uri.getHost() != null
+                    && HOSTS_PERMITIDOS.contains(uri.getHost().toLowerCase());
+        } catch (IllegalArgumentException e) {
+            return false;
         }
     }
 

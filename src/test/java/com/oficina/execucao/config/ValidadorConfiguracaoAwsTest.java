@@ -54,7 +54,9 @@ class ValidadorConfiguracaoAwsTest {
 
     @Test void localstackRejeitaHostForaDaAllowlist() {
         for (String host : List.of("https://dynamodb.us-east-1.amazonaws.com", "http://sqs.us-east-1.amazonaws.com",
-                "http://localhost.evil.com:4566", "not a uri", "localhost:4566")) {
+                "http://localhost.evil.com:4566", "not a uri", "localhost:4566", "//localhost:4566", " http://localhost:4566",
+                "ftp://localhost:4566", "http://localhost@evil.com", "http://localhost:4566@evil.com",
+                "http://evil.com#@localhost", "http://localhost.", "http://[::ffff:127.0.0.1]:4566")) {
             assertThatThrownBy(() -> ValidadorConfiguracaoAws.validar(props(Modo.LOCALSTACK, host, LOCAL, true), "", ""))
                     .hasMessageContaining("execucao.dynamodb.endpoint deve apontar");
             assertThatThrownBy(() -> ValidadorConfiguracaoAws.validar(props(Modo.LOCALSTACK, LOCAL, host, true), "", ""))
