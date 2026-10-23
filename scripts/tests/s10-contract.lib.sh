@@ -105,15 +105,22 @@ s10_doc_name() {
   awk '/^metadata:/ { m = 1; next } m && /^  name: / { sub(/^  name: */, ""); print; exit } m && /^[^ ]/ { exit }' <<<"$1"
 }
 
+# Identidade namespace/nome de um documento (namespace ausente equivale a `default`).
+s10_doc_id() {
+  local ns
+  ns="$(awk '/^metadata:/ { m = 1; next } m && /^  namespace: / { sub(/^  namespace: */, ""); print; exit } m && /^[^ ]/ { exit }' <<<"$1" | tr -d "\"'")"
+  printf '%s/%s' "${ns:-default}" "$(s10_doc_name "$1")"
+}
+
 # Todo ServiceAccount deve declarar automountServiceAccountToken: false no nível de topo do documento,
 # e todo Deployment deve usar um ServiceAccount (não `default`) presente no render com essa garantia.
 s10_check_serviceaccount() {
-  local sa found=0 rc=0 dep used name safe=$'
+  local sa found=0 rc=0 dep used name ns safe=$'
 '
   while IFS= read -r -d $'' sa; do
     found=1
     if grep -qx 'automountServiceAccountToken: false' <<<"$sa"; then
-      safe+="$(s10_doc_name "$sa")"$'
+      safe+="$(s10_doc_id "$sa")"$'
 '
     else
       echo "S-10: ServiceAccount sem automountServiceAccountToken: false" >&2; rc=1
@@ -123,8 +130,9 @@ s10_check_serviceaccount() {
   while IFS= read -r -d $'' dep; do
     used="$(awk '/^ *serviceAccountName: / { sub(/^ *serviceAccountName: */, ""); print; exit }' <<<"$dep" | tr -d "\"'")"
     name="$(s10_doc_name "$dep")"
+    ns="$(s10_doc_id "$dep")"; ns="${ns%/*}"
     if [ -z "$used" ] || [ "$used" = default ] || [[ "$safe" != *$'
-'"$used"$'
+'"$ns/$used"$'
 '* ]]; then
       echo "S-10: Deployment $name usa ServiceAccount '$used' sem automountServiceAccountToken: false no render" >&2; rc=1
     fi
