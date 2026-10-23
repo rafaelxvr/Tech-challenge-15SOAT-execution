@@ -1,0 +1,11 @@
+# Exceção SCA mínima e auditável (UNR-178). Limitada a um único CVE.
+vulnerabilities:
+  - id: CVE-2026-22733
+    paths:
+      - "pom.xml"
+    statement: >-
+      Falso positivo: o advisory oficial da Spring
+      (https://spring.io/security/cve-2026-22733/) não lista a linha 3.2.x do
+      Spring Boot como afetada. O Plano 0 fixa Spring Boot 3.2.5 nos três serviços.
+      Reavaliar até a data de revisão; remover se o advisory passar a listar 3.2.x.
+    expired_at: 2026-11-30
