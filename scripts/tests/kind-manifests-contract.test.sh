@@ -26,4 +26,12 @@ if grep -Eq '^kind: (Secret|Namespace|HorizontalPodAutoscaler)$' <<<"$rendered";
   echo "objeto fora do escopo do serviço"; exit 1
 fi
 if grep -qE 'image: .*:latest' <<<"$rendered"; then echo "tag latest"; exit 1; fi
+deploy="$root/scripts/kind-deploy.sh"
+grep -qF 'STAFF_JWT_SECRET:?' "$deploy" || { echo "deploy deve exigir STAFF_JWT_SECRET externo"; exit 1; }
+if grep -Eq 'urandom|openssl rand|--from-literal' "$deploy"; then
+  echo "deploy não pode gerar chave própria nem passar segredo em argumento"; exit 1
+fi
+if grep -Eq 'echo[^#]*\$\{?(secret|STAFF_JWT_SECRET)' "$deploy"; then
+  echo "deploy não pode imprimir o segredo"; exit 1
+fi
 echo "kind manifests contract OK"
