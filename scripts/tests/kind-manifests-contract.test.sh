@@ -34,4 +34,9 @@ fi
 if grep -Eq 'echo[^#]*\$\{?(secret|STAFF_JWT_SECRET)' "$deploy"; then
   echo "deploy não pode imprimir o segredo"; exit 1
 fi
+if grep -Fq '<(' "$deploy"; then
+  echo "deploy não pode usar process substitution (kubectl.exe não abre /proc/<pid>/fd)"; exit 1
+fi
+grep -qF 'mktemp -d' "$deploy" || { echo "deploy deve usar arquivo temporário regular para o segredo"; exit 1; }
+grep -qF "trap 'rm -rf" "$deploy" || { echo "deploy deve limpar o arquivo temporário do segredo via trap"; exit 1; }
 echo "kind manifests contract OK"

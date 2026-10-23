@@ -16,8 +16,15 @@ secret="${STAFF_JWT_SECRET:?STAFF_JWT_SECRET obrigatório: use o mesmo JWT_SECRE
 docker build -t "$image" "$root"
 kind load docker-image "$image" --name "$cluster"
 
+# Arquivo regular (não pseudoarquivo /proc/.../fd): kubectl.exe no Windows não abre process substitution do Git Bash.
+secret_dir="$(mktemp -d)"
+trap 'rm -rf "$secret_dir"' EXIT
+chmod 700 "$secret_dir"
+printf '%s' "$secret" > "$secret_dir/staff_hmac_secret"
+chmod 600 "$secret_dir/staff_hmac_secret"
+
 kubectl --context "$context" -n oficina-execution create secret generic oficina-execution-secrets \
-  --from-file=staff_hmac_secret=<(printf '%s' "$secret") \
+  --from-file=staff_hmac_secret="$secret_dir/staff_hmac_secret" \
   --dry-run=client -o yaml | kubectl --context "$context" apply -f -
 
 kubectl kustomize "$root/k8s/local" | sed "s#image: oficina-execution:local#image: ${image}#" \
