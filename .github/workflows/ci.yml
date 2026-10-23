@@ -37,9 +37,7 @@ jobs:
       - name: Resumo de cobertura JaCoCo
         if: always()
         run: |
-          awk -F, 'NR>1 {m+=$8; c+=$9; bm+=$6; bc+=$7} END {if (m+c>0) printf "Cobertura de linhas: %.2f%% (minimo 80%%)
-Cobertura de branches: %.2f%%
-", 100*c/(m+c), 100*bc/(bm+bc)}' target/site/jacoco/jacoco.csv | tee -a "$GITHUB_STEP_SUMMARY"
+          awk -F, 'NR>1 {m+=$8; c+=$9; bm+=$6; bc+=$7} END {if (m+c>0) printf "Cobertura de linhas: %.2f%% (minimo 80%%)\nCobertura de branches: %.2f%%\n", 100*c/(m+c), 100*bc/(bm+bc)}' target/site/jacoco/jacoco.csv | tee -a "$GITHUB_STEP_SUMMARY"
 
   sast-codeql:
     name: SAST (CodeQL Java)
