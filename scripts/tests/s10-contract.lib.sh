@@ -2,21 +2,30 @@
 # Verificações estruturais do controle S-10 (endurecimento de contêiner e imagens fixadas por digest).
 # Funções puras: recebem o YAML renderizado (ou o caminho do Dockerfile) e retornam 0/1 com mensagem em stderr.
 
-# Imprime o documento YAML renderizado cujo `kind` de topo é $1.
+# Imprime cada documento YAML renderizado cujo `kind` de topo é $1, terminado por  (RS).
 s10_doc() {
   awk -v want="kind: $1" '
-    function flush() { if (hit) printf "%s", buf; buf = ""; hit = 0 }
+    function flush() { if (hit) printf "%s", buf; buf = ""; hit = 0 }
     { sub(/[[:cntrl:]]$/, "") }
     /^---$/ { flush(); next }
     { buf = buf $0 "\n"; if ($0 == want) hit = 1 }
     END { flush() }' <<<"$2"
 }
 
-# Valida cada contêiner do Deployment (e o pod) por escopo, não por texto solto no YAML.
+# Valida todo Deployment do YAML renderizado: um documento ruim não é mascarado por outro bom.
 s10_check_deployment() {
-  local deployment
-  deployment="$(s10_doc Deployment "$1")"
-  [ -n "$deployment" ] || { echo "S-10: Deployment ausente" >&2; return 1; }
+  local doc found=0 rc=0
+  while IFS= read -r -d $'' doc; do
+    found=1
+    s10_check_deployment_doc "$doc" || rc=1
+  done < <(s10_doc Deployment "$1")
+  [ "$found" = 1 ] || { echo "S-10: Deployment ausente" >&2; return 1; }
+  return "$rc"
+}
+
+# Valida cada contêiner de um único Deployment (e o pod) por escopo, não por texto solto no YAML.
+s10_check_deployment_doc() {
+  local deployment="$1"
   awk '
     function indent(s) { match(s, /^ */); return RLENGTH }
     function fail(msg) { print "S-10: " msg > "/dev/stderr"; bad = 1 }
@@ -61,7 +70,12 @@ s10_check_deployment() {
       for (i = 1; i <= NR; i++) {
         l = lines[i]; ind = indent(l)
         if (!incont) { if (l ~ /^ *(containers|initContainers):$/ && ind == cind) { incont = 1; iind = -1 } continue }
-        if (ind < cind || (ind == cind && l !~ /^ *- /)) { finish_container(); incont = 0; continue }
+        if (ind < cind || (ind == cind && l !~ /^ *- /)) {
+          finish_container(); incont = 0
+          # o cabeçalho que encerra a seção pode abrir a próxima (initContainers -> containers).
+          if (l ~ /^ *(containers|initContainers):$/ && ind == cind) { incont = 1; iind = -1 }
+          continue
+        }
         if (iind < 0) iind = ind
         if (ind == iind && l ~ /^ *- /) {
           finish_container(); in_item = 1; n++; cname = ""; sec = "\n"; res = "\n"; insec2 = 0; inres = 0
@@ -83,12 +97,15 @@ s10_check_deployment() {
     }' <<<"$deployment" || return 1
 }
 
-# ServiceAccount deve declarar automountServiceAccountToken: false no nível de topo do documento.
+# Todo ServiceAccount deve declarar automountServiceAccountToken: false no nível de topo do documento.
 s10_check_serviceaccount() {
-  local sa
-  sa="$(s10_doc ServiceAccount "$1")"
-  [ -n "$sa" ] || { echo "S-10: ServiceAccount ausente" >&2; return 1; }
-  grep -qx 'automountServiceAccountToken: false' <<<"$sa" || { echo "S-10: ServiceAccount sem automountServiceAccountToken: false" >&2; return 1; }
+  local sa found=0 rc=0
+  while IFS= read -r -d $'' sa; do
+    found=1
+    grep -qx 'automountServiceAccountToken: false' <<<"$sa" || { echo "S-10: ServiceAccount sem automountServiceAccountToken: false" >&2; rc=1; }
+  done < <(s10_doc ServiceAccount "$1")
+  [ "$found" = 1 ] || { echo "S-10: ServiceAccount ausente" >&2; return 1; }
+  return "$rc"
 }
 
 # Toda diretiva FROM (sem diferenciar maiúsculas) deve fixar a imagem por @sha256:<64 hex> no próprio token.

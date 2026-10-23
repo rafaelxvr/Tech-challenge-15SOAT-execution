@@ -50,6 +50,42 @@ kind: ConfigMap
 data:
   decoy: automountServiceAccountToken: false"
 expect_fail "automount só em ConfigMap" s10_check_serviceaccount "$sa_decoy"
+# Bypass revisado (UNR-186): contêiner inseguro logo após initContainers e documentos duplicados do mesmo kind.
+init_bypass="${rendered/$'      containers:
+'/$'      initContainers:
+      - image: busybox
+        name: init
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          seccompProfile:
+            type: RuntimeDefault
+        resources:
+          limits:
+            cpu: 100m
+            memory: 64Mi
+      containers:
+      - image: busybox
+        name: inseguro
+'}"
+expect_fail "contêiner inseguro após initContainers" s10_check_deployment "$init_bypass"
+sa_dup="$rendered
+---
+apiVersion: v1
+kind: ServiceAccount
+automountServiceAccountToken: true
+metadata:
+  name: outro"
+expect_fail "segundo ServiceAccount com automount true" s10_check_serviceaccount "$sa_dup"
+bad_dep="$(sed 's/allowPrivilegeEscalation: false/allowPrivilegeEscalation: true/' <<<"$rendered")"
+dep_dup="$rendered
+---
+$(s10_doc Deployment "$bad_dep" | tr -d '')"
+expect_fail "segundo Deployment inseguro" s10_check_deployment "$dep_dup"
 digest="@sha256:$(printf '0%.0s' $(seq 64))"
 printf 'from alpine:3
 ' > "$mut/lower"
