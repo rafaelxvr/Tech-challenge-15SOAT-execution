@@ -7,7 +7,7 @@ for expected in \
   'namespace: oficina-execution' \
   'name: oficina-execution' \
   'EXECUCAO_AWS_MODO: LOCALSTACK' \
-  'http://localstack.infra.svc.cluster.local:4566' \
+  'http://localstack.infra.svc:4566' \
   'execution-commands.fifo' \
   'os-saga-replies.fifo' \
   'oficina-phase4-execucoes' \
@@ -19,6 +19,17 @@ for expected in \
   'readOnlyRootFilesystem: true'; do
   grep -qF "$expected" <<<"$rendered" || { echo "faltando: $expected"; exit 1; }
 done
+# S-3 manifesto x allowlist: todo endpoint/URL de fila do ConfigMap precisa cair na allowlist do ValidadorConfiguracaoAws.
+validator="$root/src/main/java/com/oficina/execucao/config/ValidadorConfiguracaoAws.java"
+allowed="$(grep -E 'HOSTS_PERMITIDOS *= *Set\.of' "$validator" | grep -oE '"[^"]+"' | tr -d '"')"
+[ -n "$allowed" ] || { echo "allowlist HOSTS_PERMITIDOS não encontrada no validador"; exit 1; }
+endpoints="$(grep -E '^ +EXECUCAO_(DYNAMODB_ENDPOINT|SQS_ENDPOINT|FILA_[A-Z]+): ' <<<"$rendered" | sed -E 's/^[^:]+: *//')"
+[ -n "$endpoints" ] || { echo "nenhum endpoint EXECUCAO_* no ConfigMap renderizado"; exit 1; }
+while IFS= read -r url; do
+  host="${url#*://}"; host="${host%%/*}"
+  if [[ "$host" == \[* ]]; then host="${host%%]*}]"; else host="${host%%:*}"; fi
+  grep -qxF "$host" <<<"$allowed" || { echo "host fora da allowlist S-3: $host ($url)"; exit 1; }
+done <<<"$endpoints"
 if grep -Eq 'amazonaws\.com|eks\.amazonaws|arn:aws|JWT_SECRET: ' <<<"$rendered"; then
   echo "referência AWS ou segredo literal encontrada"; exit 1
 fi
