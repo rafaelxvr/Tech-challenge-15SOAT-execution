@@ -29,6 +29,10 @@ class MatrizRejeicaoJwtTest {
     final PropriedadesJwt jwt = new PropriedadesJwt(TokensTeste.SEGREDO,
             new PropriedadesJwt.Staff(TokensTeste.EMISSOR, TokensTeste.AUDIENCIA, TokensTeste.KID));
     final FiltroTokenStaff filtro = new FiltroTokenStaff(jwt, Clock.systemUTC());
+    /** Segredo com 64+ bytes: a mesma chave do verificador serve para assinar HS256, HS384 e HS512. */
+    static final String SEGREDO_LONGO = "segredo-longo-de-teste-execution-service-com-pelo-menos-64-bytes-xyz";
+    final FiltroTokenStaff filtroLongo = new FiltroTokenStaff(new PropriedadesJwt(SEGREDO_LONGO,
+            new PropriedadesJwt.Staff(TokensTeste.EMISSOR, TokensTeste.AUDIENCIA, TokensTeste.KID)), Clock.systemUTC());
 
     @AfterEach void limpar() { SecurityContextHolder.clearContext(); }
 
@@ -65,6 +69,10 @@ class MatrizRejeicaoJwtTest {
     }
 
     void exigir401(String nome, String token) throws Exception {
+        exigir401(filtro, nome, token);
+    }
+
+    void exigir401(FiltroTokenStaff filtro, String nome, String token) throws Exception {
         var pedido = new MockHttpServletRequest();
         pedido.addHeader("Authorization", "Bearer " + token);
         var resposta = new MockHttpServletResponse();
@@ -85,16 +93,22 @@ class MatrizRejeicaoJwtTest {
 
     @Test void algoritmoEAssinatura() throws Exception {
         exigir401("assinatura de outro segredo", base(validos()).signWith(chave(OUTRO_SEGREDO), Jwts.SIG.HS256).compact());
-        var hs384 = chave(TokensTeste.SEGREDO + "-extra-para-hs384-0123456789abcdef");
-        exigir401("HS384", base(validos()).signWith(hs384, Jwts.SIG.HS384).compact());
-        var hs512 = chave(TokensTeste.SEGREDO + "-extra-para-hs512-0123456789abcdef0123456789abcdef");
-        exigir401("HS512", base(validos()).signWith(hs512, Jwts.SIG.HS512).compact());
+        // mesma chave efetiva do verificador; varia só o algoritmo
+        var chaveLonga = chave(SEGREDO_LONGO);
+        var controle = new MockFilterChain();
+        var pedidoControle = new MockHttpServletRequest();
+        pedidoControle.addHeader("Authorization", "Bearer " + base(validos()).signWith(chaveLonga, Jwts.SIG.HS256).compact());
+        filtroLongo.doFilter(pedidoControle, new MockHttpServletResponse(), controle);
+        assertThat(controle.getRequest()).as("controle HS256 com a chave longa passa").isNotNull();
+        SecurityContextHolder.clearContext();
+        exigir401(filtroLongo, "HS384 com a mesma chave", base(validos()).signWith(chaveLonga, Jwts.SIG.HS384).compact());
+        exigir401(filtroLongo, "HS512 com a mesma chave", base(validos()).signWith(chaveLonga, Jwts.SIG.HS512).compact());
         String payload = b64("{\"iss\":\"" + TokensTeste.EMISSOR + "\",\"aud\":\"" + TokensTeste.AUDIENCIA
                 + "\",\"sub\":\"x\",\"principal_type\":\"staff\",\"token_use\":\"access\",\"roles\":[\"ADMIN\"],"
                 + "\"iat\":" + Instant.now().minusSeconds(5).getEpochSecond()
                 + ",\"exp\":" + Instant.now().plusSeconds(600).getEpochSecond() + "}");
         exigir401("alg none com kid", b64("{\"alg\":\"none\",\"kid\":\"" + TokensTeste.KID + "\"}") + "." + payload + ".");
-        exigir401("alg none com typ", b64("{\"alg\":\"none\",\"typ\":\"JWT\"}") + "." + payload + ".");
+        exigir401("alg none com typ e kid", b64("{\"alg\":\"none\",\"typ\":\"JWT\",\"kid\":\"" + TokensTeste.KID + "\"}") + "." + payload + ".");
         exigir401("assinatura adulterada", assinado(base(validos())) + "x");
         exigir401("partes vazias", "..");
         exigir401("token vazio", "");
