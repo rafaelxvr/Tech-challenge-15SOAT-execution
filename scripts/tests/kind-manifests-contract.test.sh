@@ -86,6 +86,22 @@ dep_dup="$rendered
 ---
 $(s10_doc Deployment "$bad_dep" | tr -d '')"
 expect_fail "segundo Deployment inseguro" s10_check_deployment "$dep_dup"
+# Bypass revisado (UNR-187): override inseguro no contêiner e Deployment com ServiceAccount não correlacionado.
+root_false="${rendered/$'          allowPrivilegeEscalation: false
+'/$'          allowPrivilegeEscalation: false
+          runAsNonRoot: false
+'}"
+expect_fail "override runAsNonRoot false no contêiner" s10_check_deployment "$root_false"
+seccomp_off="${rendered/$'          allowPrivilegeEscalation: false
+'/$'          allowPrivilegeEscalation: false
+          seccompProfile:
+            type: Unconfined
+'}"
+expect_fail "override seccomp Unconfined no contêiner" s10_check_deployment "$seccomp_off"
+sa_default="$(sed 's/serviceAccountName: oficina-execution/serviceAccountName: default/' <<<"$rendered")"
+expect_fail "Deployment com ServiceAccount default" s10_check_serviceaccount "$sa_default"
+sa_unref="$(sed 's/serviceAccountName: oficina-execution/serviceAccountName: inexistente/' <<<"$rendered")"
+expect_fail "ServiceAccount do Deployment ausente no render" s10_check_serviceaccount "$sa_unref"
 digest="@sha256:$(printf '0%.0s' $(seq 64))"
 printf 'from alpine:3
 ' > "$mut/lower"

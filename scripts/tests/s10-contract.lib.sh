@@ -35,8 +35,11 @@ s10_check_deployment_doc() {
       if (sec !~ /\nallowPrivilegeEscalation: false\n/) fail("contêiner " name " sem allowPrivilegeEscalation: false")
       if (sec !~ /\ndrop:\n- ALL\n/) fail("contêiner " name " sem capabilities.drop: [ALL]")
       if (sec !~ /\nreadOnlyRootFilesystem: true\n/) fail("contêiner " name " sem readOnlyRootFilesystem: true")
-      eff_nonroot = (sec ~ /\nrunAsNonRoot: true\n/) || (podsec ~ /\nrunAsNonRoot: true\n/)
-      eff_seccomp = (sec ~ /\nseccompProfile:\ntype: RuntimeDefault\n/) || (podsec ~ /\nseccompProfile:\ntype: RuntimeDefault\n/)
+      # Valor efetivo: o override do contêiner, quando presente, prevalece sobre o do pod.
+      if (sec ~ /\nrunAsNonRoot: /) eff_nonroot = (sec ~ /\nrunAsNonRoot: true\n/)
+      else eff_nonroot = (podsec ~ /\nrunAsNonRoot: true\n/)
+      if (sec ~ /\nseccompProfile:\n/) eff_seccomp = (sec ~ /\nseccompProfile:\ntype: RuntimeDefault\n/)
+      else eff_seccomp = (podsec ~ /\nseccompProfile:\ntype: RuntimeDefault\n/)
       if (!eff_nonroot) fail("contêiner " name " sem runAsNonRoot: true (contêiner ou pod)")
       if (!eff_seccomp) fail("contêiner " name " sem seccomp RuntimeDefault (contêiner ou pod)")
       if (res !~ /\nlimits:\n(cpu|memory): [^\n]*\n(cpu|memory): /) fail("contêiner " name " sem limits de cpu e memory")
@@ -97,14 +100,35 @@ s10_check_deployment_doc() {
     }' <<<"$deployment" || return 1
 }
 
-# Todo ServiceAccount deve declarar automountServiceAccountToken: false no nível de topo do documento.
+# Nome em metadata.name de um documento YAML.
+s10_doc_name() {
+  awk '/^metadata:/ { m = 1; next } m && /^  name: / { sub(/^  name: */, ""); print; exit } m && /^[^ ]/ { exit }' <<<"$1"
+}
+
+# Todo ServiceAccount deve declarar automountServiceAccountToken: false no nível de topo do documento,
+# e todo Deployment deve usar um ServiceAccount (não `default`) presente no render com essa garantia.
 s10_check_serviceaccount() {
-  local sa found=0 rc=0
+  local sa found=0 rc=0 dep used name safe=$'
+'
   while IFS= read -r -d $'' sa; do
     found=1
-    grep -qx 'automountServiceAccountToken: false' <<<"$sa" || { echo "S-10: ServiceAccount sem automountServiceAccountToken: false" >&2; rc=1; }
+    if grep -qx 'automountServiceAccountToken: false' <<<"$sa"; then
+      safe+="$(s10_doc_name "$sa")"$'
+'
+    else
+      echo "S-10: ServiceAccount sem automountServiceAccountToken: false" >&2; rc=1
+    fi
   done < <(s10_doc ServiceAccount "$1")
   [ "$found" = 1 ] || { echo "S-10: ServiceAccount ausente" >&2; return 1; }
+  while IFS= read -r -d $'' dep; do
+    used="$(awk '/^ *serviceAccountName: / { sub(/^ *serviceAccountName: */, ""); print; exit }' <<<"$dep" | tr -d "\"'")"
+    name="$(s10_doc_name "$dep")"
+    if [ -z "$used" ] || [ "$used" = default ] || [[ "$safe" != *$'
+'"$used"$'
+'* ]]; then
+      echo "S-10: Deployment $name usa ServiceAccount '$used' sem automountServiceAccountToken: false no render" >&2; rc=1
+    fi
+  done < <(s10_doc Deployment "$1")
   return "$rc"
 }
 
