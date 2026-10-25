@@ -1,0 +1,23 @@
+# Configuração não sensível. Os valores de confiança do JWT de staff vêm do mesmo contrato do os-service;
+# o segredo HMAC NÃO fica aqui: Secret `oficina-execution-secrets`, criado por scripts/kind-deploy.sh.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: oficina-execution-config
+data:
+  EXECUCAO_AWS_MODO: LOCALSTACK
+  AWS_REGION: us-east-1
+  EXECUCAO_DYNAMODB_ENDPOINT: http://localstack.infra.svc:4566
+  EXECUCAO_SQS_ENDPOINT: http://localstack.infra.svc:4566
+  EXECUCAO_MENSAGERIA_ENABLED: "true"
+  EXECUCAO_FILA_COMANDOS: http://localstack.infra.svc:4566/000000000000/execution-commands.fifo
+  EXECUCAO_FILA_RESPOSTAS: http://localstack.infra.svc:4566/000000000000/os-saga-replies.fifo
+  EXECUCAO_TABELA_EXECUCOES: oficina-phase4-execucoes
+  EXECUCAO_TABELA_OUTBOX: oficina-phase4-execucao-outbox
+  EXECUCAO_TABELA_INBOX: oficina-phase4-execucao-inbox
+  EXECUCAO_CRIAR_TABELAS: "false"
+  EXECUCAO_CAPACIDADE_REPAROS: "5"
+  EXECUCAO_FILIAIS: MATRIZ
+  JWT_STAFF_ISSUER: oficina-os-service
+  JWT_STAFF_AUDIENCE: oficina-staff
+  JWT_STAFF_KEY_ID: staff-local-1
