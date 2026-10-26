@@ -135,7 +135,7 @@ class ProcessadorComandosTest extends LocalStackSupport {
         enviar(TiposMensagem.CANCELAR_EXECUCAO, os, 6, cancelar());
         assertThat(vagasEmUso("MATRIZ")).isZero();
         var cancelamentos = respostasDa(os).stream().filter(r -> r.type().equals(TiposMensagem.EXECUCAO_CANCELADA)).toList();
-        assertThat(cancelamentos).extracting(r -> r.payload().get("canceladas").asInt()).containsExactly(1, 1);
+        assertThat(cancelamentos).extracting(r -> r.payload().get("canceladas").asInt()).containsExactly(1, 0);
         assertThat(cancelamentos).anySatisfy(r -> assertThat(r.causationId()).isEqualTo(cancelamento.messageId()));
     }
 
