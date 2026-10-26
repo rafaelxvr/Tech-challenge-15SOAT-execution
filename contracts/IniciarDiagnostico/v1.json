@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["numero", "filialId", "versaoOrcamento"],
+  "properties": {
+    "numero": {"type": "integer", "minimum": 1},
+    "filialId": {"type": "string", "pattern": "^[A-Z0-9_-]{1,32}$"},
+    "versaoOrcamento": {"type": "integer", "minimum": 1}
+  },
+  "additionalProperties": false
+}

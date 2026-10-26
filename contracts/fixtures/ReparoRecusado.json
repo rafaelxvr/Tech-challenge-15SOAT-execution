@@ -1,0 +1,16 @@
+{
+  "messageId": "00000111-0000-4000-8000-000000000111",
+  "kind": "REPLY",
+  "type": "ReparoRecusado",
+  "schemaVersion": 1,
+  "sagaId": "00000002-0000-4000-8000-000000000002",
+  "osId": "00000003-0000-4000-8000-000000000003",
+  "passo": 6,
+  "causationId": "00000102-0000-4000-8000-000000000102",
+  "occurredAt": "2026-10-22T12:00:00Z",
+  "correlationId": "00000004-0000-4000-8000-000000000004",
+  "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+  "payload": {
+    "motivo": "CAPACIDADE_ESGOTADA"
+  }
+}
