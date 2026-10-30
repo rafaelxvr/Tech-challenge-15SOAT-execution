@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["versaoOrcamento", "motivo"],
+  "properties": {
+    "versaoOrcamento": {"type": "integer", "minimum": 1},
+    "motivo": {"enum": ["DIAGNOSTICO_RECUSADO", "DIAGNOSTICO_SEM_RESPOSTA", "ORCAMENTO_FALHOU", "ORCAMENTO_SEM_RESPOSTA",
+      "DECISAO_EXPIRADA", "DECISAO_SEM_RESPOSTA", "PAGAMENTO_RECUSADO", "PAGAMENTO_EXPIRADO", "ESTOQUE_INSUFICIENTE",
+      "REPARO_RECUSADO", "REPARO_SEM_RESPOSTA"]}
+  },
+  "additionalProperties": false
+}
