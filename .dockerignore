@@ -1,0 +1,8 @@
+target/
+.git/
+.github/
+k8s/
+scripts/
+docs/
+contracts/
+*.md

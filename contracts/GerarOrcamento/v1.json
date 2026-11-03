@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["numero", "clienteId", "versaoOrcamento", "itens"],
+  "properties": {
+    "numero": {"type": "integer", "minimum": 1},
+    "clienteId": {"type": "string", "format": "uuid"},
+    "versaoOrcamento": {"type": "integer", "minimum": 1},
+    "itens": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["tipo", "referenciaId", "descricao", "quantidade", "precoUnitario"],
+        "properties": {
+          "tipo": {"enum": ["SERVICO", "PECA"]},
+          "referenciaId": {"type": "string", "format": "uuid"},
+          "descricao": {"type": "string", "minLength": 1},
+          "quantidade": {"type": "integer", "minimum": 1},
+          "precoUnitario": {"type": "number", "minimum": 0}
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

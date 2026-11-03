@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://oficina.example/contracts/envelope/v1.json",
+  "type": "object",
+  "required": ["messageId", "kind", "type", "schemaVersion", "sagaId", "osId", "passo", "occurredAt", "correlationId", "payload"],
+  "properties": {
+    "messageId": {"type": "string", "format": "uuid"},
+    "kind": {"enum": ["COMMAND", "REPLY", "EVENT"]},
+    "type": {"type": "string", "pattern": "^[A-Z][A-Za-z]{2,63}$"},
+    "schemaVersion": {"type": "integer", "minimum": 1},
+    "sagaId": {"type": "string", "format": "uuid"},
+    "osId": {"type": "string", "format": "uuid"},
+    "passo": {"type": "integer", "minimum": 1, "maximum": 7},
+    "causationId": {"type": ["string", "null"], "format": "uuid"},
+    "occurredAt": {"type": "string", "format": "date-time"},
+    "correlationId": {"type": "string", "format": "uuid"},
+    "traceparent": {"type": ["string", "null"], "pattern": "^00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$"},
+    "payload": {"type": "object"}
+  },
+  "additionalProperties": false
+}
