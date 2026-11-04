@@ -140,11 +140,12 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Set up Java 17
+      # O scanner do Sonar 4.x exige JVM 21+; o código continua compilando com release 17 (java.version).
+      - name: Set up Java 21
         uses: actions/setup-java@3a4f6e1af504cf6a31855fa899c6aa5355ba6c12 # v4.7.0
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: '21'
           cache: maven
 
       - name: Exigir configuração do SonarCloud (falha, nunca ignora)
