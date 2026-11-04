@@ -37,7 +37,16 @@ jobs:
       - name: Resumo de cobertura JaCoCo
         if: always()
         run: |
-          awk -F, 'NR>1 {m+=$8; c+=$9; bm+=$6; bc+=$7} END {if (m+c>0) printf "Cobertura de linhas: %.2f%% (minimo 80%%)\nCobertura de branches: %.2f%%\n", 100*c/(m+c), 100*bc/(bm+bc)}' target/site/jacoco/jacoco.csv | tee -a "$GITHUB_STEP_SUMMARY"
+          awk -F, 'NR>1 {m+=$8; c+=$9; bm+=$6; bc+=$7} END {if (m+c>0) printf "Cobertura de linhas: %.2f%% (%d/%d, minimo 80%%)\nCobertura de branches: %.2f%%\n", 100*c/(m+c), c, m+c, 100*bc/(bm+bc)}' target/site/jacoco/jacoco.csv | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Relatórios JaCoCo (SHA ${{ github.sha }})
+        if: always()
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        with:
+          name: jacoco-${{ github.sha }}
+          path: target/site/jacoco
+          if-no-files-found: error
+          retention-days: 14
 
   sast-codeql:
     name: SAST (CodeQL Java)
