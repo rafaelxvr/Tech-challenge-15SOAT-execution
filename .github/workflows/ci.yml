@@ -1,6 +1,7 @@
 name: CI
 
 on:
+  workflow_dispatch:
   push:
     branches: [main, develop]
   pull_request:
@@ -116,3 +117,69 @@ jobs:
 
       - name: Contrato offline dos manifests Kind e do Dockerfile
         run: bash scripts/tests/kind-manifests-contract.test.sh
+
+  # Quality gate do SonarCloud (UNR-618). Ativo com a variável de repositório SONAR_ENABLED=true
+  # ou por execução manual (workflow_dispatch). Quando ativo, não há skip silencioso: sem
+  # SONAR_TOKEN o job FALHA com mensagem explícita.
+  # Organização e chave do projeto ficam no pom.xml (não secretas); só o token é secret.
+  # PR vindo de fork não recebe secrets e fica fora do gate.
+  sonar:
+    name: SonarCloud e quality gate
+    if: ${{ (vars.SONAR_ENABLED == 'true' || github.event_name == 'workflow_dispatch') && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      SONAR_MAVEN_PLUGIN: org.sonarsource.scanner.maven:sonar-maven-plugin:4.0.0.4121
+    steps:
+      - name: Checkout (SHA ${{ github.sha }})
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # O scanner do Sonar 4.x exige JVM 21+; o código continua compilando com release 17 (java.version).
+      - name: Set up Java 21
+        uses: actions/setup-java@3a4f6e1af504cf6a31855fa899c6aa5355ba6c12 # v4.7.0
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Exigir configuração do SonarCloud (falha, nunca ignora)
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          set +x
+          faltando=0
+          if [ -z "$SONAR_TOKEN" ]; then
+            echo "::error::Secret SONAR_TOKEN ausente. Cadastre-o em Settings > Secrets and variables > Actions ou desative o gate com SONAR_ENABLED=false."
+            faltando=1
+          fi
+          exit "$faltando"
+
+      # verify gera o JaCoCo XML (target/site/jacoco/jacoco.xml) lido pelo scanner.
+      # qualitygate.wait faz o job falhar se o quality gate reprovar. O token só vai por env, nunca para o log.
+      - name: Análise e espera do quality gate
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          set +x
+          bash ./mvnw -B -q verify "${SONAR_MAVEN_PLUGIN}:sonar"             -Dsonar.host.url=https://sonarcloud.io               -Dsonar.qualitygate.wait=true             -Dsonar.qualitygate.timeout=600
+
+      - name: Evidência do quality gate (SHA ${{ github.sha }})
+        if: always()
+        run: |
+          set +x
+          {
+            echo "### SonarCloud"
+            echo "- Commit analisado: \`${GITHUB_SHA}\`"
+            echo "- Execução: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            if [ -f target/sonar/report-task.txt ]; then
+              echo "- Painel: $(grep '^dashboardUrl=' target/sonar/report-task.txt | cut -d= -f2-)"
+            else
+              echo "- Painel: indisponível (a análise não chegou a publicar)"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
