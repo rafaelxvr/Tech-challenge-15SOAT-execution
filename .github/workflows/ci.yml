@@ -118,6 +118,80 @@ jobs:
       - name: Contrato offline dos manifests Kind e do Dockerfile
         run: bash scripts/tests/kind-manifests-contract.test.sh
 
+  # Publicação da imagem no GHCR (UNR-709). Só em push para develop/main; PR nunca publica.
+  # GITHUB_TOKEN com packages:write somente neste job (sem PAT nem segredo novo).
+  # O buildx dedicado faz o digest do build-push-action ser o do manifesto publicado.
+  # A imagem não recebe segredo: a licença do New Relic e as credenciais entram só em runtime.
+  docker-image:
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main')
+    name: Publicar imagem no GHCR
+    needs: [build-and-test, sca-trivy, secrets-gitleaks]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    env:
+      REGISTRY: ghcr.io
+      IMAGE_NAME: oficina-execution-service
+    outputs:
+      image_base: ${{ steps.names.outputs.image_base }}
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      # GHCR exige owner em minúsculas.
+      - name: Normalizar nome da imagem
+        id: names
+        env:
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          OWNER_LC=$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')
+          echo "image_base=${REGISTRY}/${OWNER_LC}/${IMAGE_NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Configurar Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+
+      - name: Login GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Metadados da imagem
+        id: meta
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
+        with:
+          images: ${{ steps.names.outputs.image_base }}
+          tags: |
+            type=sha,prefix=,format=long
+
+      - name: Build e push
+        id: build
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+      - name: Resumo da imagem publicada
+        env:
+          IMAGE_BASE: ${{ steps.names.outputs.image_base }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          {
+            echo "### Imagem publicada no GHCR"
+            echo "- Imagem: \`${IMAGE_BASE}\`"
+            echo "- Tag (SHA do commit): \`${GITHUB_SHA}\`"
+            echo "- Digest: \`${DIGEST}\`"
+            echo "- Referência imutável: \`${IMAGE_BASE}@${DIGEST}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
   # Quality gate do SonarCloud (UNR-618). Ativo com a variável de repositório SONAR_ENABLED=true
   # ou por execução manual (workflow_dispatch). Quando ativo, não há skip silencioso: sem
   # SONAR_TOKEN o job FALHA com mensagem explícita.
