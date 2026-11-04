@@ -120,8 +120,8 @@ jobs:
 
   # Quality gate do SonarCloud (UNR-618). Ativo com a variável de repositório SONAR_ENABLED=true
   # ou por execução manual (workflow_dispatch). Quando ativo, não há skip silencioso: sem
-  # SONAR_TOKEN/SONAR_ORGANIZATION/SONAR_PROJECT_KEY o job FALHA com mensagem explícita.
-  # Organização e chave do projeto são variáveis NÃO secretas; só o token é secret.
+  # SONAR_TOKEN o job FALHA com mensagem explícita.
+  # Organização e chave do projeto ficam no pom.xml (não secretas); só o token é secret.
   # PR vindo de fork não recebe secrets e fica fora do gate.
   sonar:
     name: SonarCloud e quality gate
@@ -133,8 +133,6 @@ jobs:
       contents: read
     env:
       SONAR_MAVEN_PLUGIN: org.sonarsource.scanner.maven:sonar-maven-plugin:4.0.0.4121
-      SONAR_ORGANIZATION: ${{ vars.SONAR_ORGANIZATION }}
-      SONAR_PROJECT_KEY: ${{ vars.SONAR_PROJECT_KEY }}
     steps:
       - name: Checkout (SHA ${{ github.sha }})
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -159,12 +157,6 @@ jobs:
             echo "::error::Secret SONAR_TOKEN ausente. Cadastre-o em Settings > Secrets and variables > Actions ou desative o gate com SONAR_ENABLED=false."
             faltando=1
           fi
-          for v in SONAR_ORGANIZATION SONAR_PROJECT_KEY; do
-            if [ -z "${!v}" ]; then
-              echo "::error::Variável de repositório $v ausente (valor não secreto, ver SonarCloud > Information)."
-              faltando=1
-            fi
-          done
           exit "$faltando"
 
       # verify gera o JaCoCo XML (target/site/jacoco/jacoco.xml) lido pelo scanner.
@@ -174,7 +166,7 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
           set +x
-          bash ./mvnw -B -q verify "${SONAR_MAVEN_PLUGIN}:sonar"             -Dsonar.host.url=https://sonarcloud.io             -Dsonar.organization="${SONAR_ORGANIZATION}"             -Dsonar.projectKey="${SONAR_PROJECT_KEY}"             -Dsonar.qualitygate.wait=true             -Dsonar.qualitygate.timeout=600
+          bash ./mvnw -B -q verify "${SONAR_MAVEN_PLUGIN}:sonar"             -Dsonar.host.url=https://sonarcloud.io               -Dsonar.qualitygate.wait=true             -Dsonar.qualitygate.timeout=600
 
       - name: Evidência do quality gate (SHA ${{ github.sha }})
         if: always()
