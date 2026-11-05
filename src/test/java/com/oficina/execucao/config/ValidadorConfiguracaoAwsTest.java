@@ -358,6 +358,25 @@ class ValidadorConfiguracaoAwsTest {
                 .hasMessageContaining("endpoint_url");
     }
 
+    // UNR-883: a propriedade JVM aws.profile precede a variavel AWS_PROFILE no SDK
+    @Test void irsaInspecionaOPerfilDaJvmQuandoConflitaComAwsProfile() throws Exception {
+        escrever("config", "[profile env]\nregion = us-east-1\n[profile jvm]\nendpoint_url = http://evil.example\n");
+        assertThatThrownBy(() -> validarIrsaComHome(Map.of("AWS_PROFILE", "env"), Map.of("aws.profile", "jvm"), dir))
+                .hasMessageContaining("endpoint_url").message().doesNotContain("evil.example");
+    }
+
+    @Test void irsaIgnoraEndpointNoPerfilDaVariavelQuandoAJvmEscolheOutro() throws Exception {
+        escrever("config", "[profile env]\nendpoint_url = http://evil.example\n[profile jvm]\nregion = us-east-1\n");
+        assertThatCode(() -> validarIrsaComHome(Map.of("AWS_PROFILE", "env"), Map.of("aws.profile", "jvm"), dir))
+                .doesNotThrowAnyException();
+    }
+
+    @Test void irsaUsaAwsProfileQuandoAPropriedadeJvmEstaEmBranco() throws Exception {
+        escrever("config", "[profile env]\nendpoint_url = http://evil.example\n");
+        assertThatThrownBy(() -> validarIrsaComHome(Map.of("AWS_PROFILE", "env"), Map.of("aws.profile", " "), dir))
+                .hasMessageContaining("endpoint_url");
+    }
+
     @Test void irsaRejeitaEndpointNoPerfilEfetivoDoArquivoDeCredenciais() throws Exception {
         escrever("credentials", "[default]\nendpoint_url = http://evil.example\n");
         assertThatThrownBy(() -> validarIrsaComHome(Map.of(), Map.of(), dir))

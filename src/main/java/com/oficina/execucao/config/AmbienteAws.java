@@ -68,10 +68,10 @@ public final class AmbienteAws {
     /** Keys set in the [default] / [profile default] section of ~/.aws/config. */
     Set<String> chavesDoPerfilDefaultEmConfig() { return chaves(".aws/config", true, "default"); }
 
-    /** Profile the SDK picks: AWS_PROFILE, then aws.profile, else default. */
+    /** Profile the SDK picks: the aws.profile JVM property precedes AWS_PROFILE, else default. */
     String perfilEfetivo() {
-        String nome = variaveis.apply("AWS_PROFILE");
-        if (!preenchido(nome)) nome = propriedadesJvm.apply("aws.profile");
+        String nome = propriedadesJvm.apply("aws.profile");
+        if (!preenchido(nome)) nome = variaveis.apply("AWS_PROFILE");
         return preenchido(nome) ? nome.strip() : "default";
     }
 
