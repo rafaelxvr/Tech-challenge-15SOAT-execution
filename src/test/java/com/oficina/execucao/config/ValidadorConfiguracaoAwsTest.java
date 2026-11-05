@@ -323,4 +323,76 @@ class ValidadorConfiguracaoAwsTest {
                 AmbienteAws.de(Map.of("AWS_EC2_METADATA_DISABLED", "true"), Map.of(), dir)))
                 .doesNotThrowAnyException();
     }
+
+    // UNR-882 F1: IRSA nao aceita endpoint vindo do arquivo AWS compartilhado
+    private void validarIrsaComHome(Map<String, String> variaveis, Map<String, String> jvm, Path home) throws Exception {
+        String t = token("x");
+        ValidadorConfiguracaoAws.validar(props(Modo.IRSA, "", "", false), ROLE, t, AmbienteAws.de(variaveis, jvm, home));
+    }
+
+    @ParameterizedTest @ValueSource(strings = {"AWS_CONFIG_FILE", "AWS_SHARED_CREDENTIALS_FILE"})
+    void irsaRejeitaArquivoAlternativoPorVariavel(String nome) {
+        assertThatThrownBy(() -> validarIrsaComHome(Map.of(nome, "/tmp/segredo-arquivo"), Map.of(), dir))
+                .hasMessageContaining(nome).message().doesNotContain("segredo-arquivo");
+    }
+
+    @ParameterizedTest @ValueSource(strings = {"aws.configFile", "aws.sharedCredentialsFile"})
+    void irsaRejeitaArquivoAlternativoPorPropriedadeJvm(String nome) {
+        assertThatThrownBy(() -> validarIrsaComHome(Map.of(), Map.of(nome, "/tmp/segredo-arquivo"), dir))
+                .hasMessageContaining(nome).message().doesNotContain("segredo-arquivo");
+    }
+
+    @ParameterizedTest @ValueSource(strings = {"endpoint_url", "services"})
+    void irsaRejeitaEndpointNoPerfilDefaultDoConfig(String chave) throws Exception {
+        escrever("config", "[default]\nregion = us-east-1\n" + chave + " = evil.example\n");
+        assertThatThrownBy(() -> validarIrsaComHome(Map.of(), Map.of(), dir))
+                .hasMessageContaining(".aws/config").hasMessageContaining(chave)
+                .message().doesNotContain("evil.example");
+    }
+
+    @Test void irsaRejeitaEndpointNoPerfilEfetivoEscolhidoPorAwsProfile() throws Exception {
+        escrever("config", "[profile alvo]\nendpoint_url = http://evil.example\n");
+        assertThatThrownBy(() -> validarIrsaComHome(Map.of("AWS_PROFILE", "alvo"), Map.of(), dir))
+                .hasMessageContaining("endpoint_url").message().doesNotContain("evil.example");
+        assertThatThrownBy(() -> validarIrsaComHome(Map.of(), Map.of("aws.profile", "alvo"), dir))
+                .hasMessageContaining("endpoint_url");
+    }
+
+    @Test void irsaRejeitaEndpointNoPerfilEfetivoDoArquivoDeCredenciais() throws Exception {
+        escrever("credentials", "[default]\nendpoint_url = http://evil.example\n");
+        assertThatThrownBy(() -> validarIrsaComHome(Map.of(), Map.of(), dir))
+                .hasMessageContaining(".aws/credentials").hasMessageContaining("endpoint_url");
+    }
+
+    @Test void irsaIgnoraEndpointEmPerfilQueNaoEEfetivo() throws Exception {
+        escrever("config", "[default]\nregion = us-east-1\n[profile outro]\nendpoint_url = http://x\n");
+        assertThatCode(() -> validarIrsaComHome(Map.of(), Map.of(), dir)).doesNotThrowAnyException();
+    }
+
+    @Test void irsaFalhaFechadoQuandoArquivoCompartilhadoNaoELegivel() throws Exception {
+        Files.createDirectories(dir.resolve(".aws/config"));
+        assertThatThrownBy(() -> validarIrsaComHome(Map.of(), Map.of(), dir)).hasMessageContaining(".aws/config");
+    }
+
+    // UNR-882 F2: o SDK resolve o home por env HOME antes de user.home
+    @Test void envHomeDivergenteDeUserHomeEOUsadoNoNodeRole(@TempDir Path outroHome) throws Exception {
+        Files.createDirectories(outroHome.resolve(".aws"));
+        Files.writeString(outroHome.resolve(".aws/config"), "[default]\nendpoint_url = http://evil.example\n");
+        assertThatThrownBy(() -> ValidadorConfiguracaoAws.validar(props(Modo.NODE_ROLE, "", "", false), "", "",
+                AmbienteAws.de(Map.of("HOME", outroHome.toString()), Map.of(), dir)))
+                .hasMessageContaining("endpoint_url").message().doesNotContain("evil.example");
+    }
+
+    @Test void envHomeDivergenteDeUserHomeEOUsadoNoIrsa(@TempDir Path outroHome) throws Exception {
+        Files.createDirectories(outroHome.resolve(".aws"));
+        Files.writeString(outroHome.resolve(".aws/config"), "[default]\nservices = x\n");
+        assertThatThrownBy(() -> validarIrsaComHome(Map.of("HOME", outroHome.toString()), Map.of(), dir))
+                .hasMessageContaining("services");
+    }
+
+    @Test void homeEmBrancoCaiNoUserHome() throws Exception {
+        escrever("config", "[default]\nendpoint_url = http://evil.example\n");
+        assertThatThrownBy(() -> validarIrsaComHome(Map.of("HOME", " "), Map.of(), dir))
+                .hasMessageContaining("endpoint_url");
+    }
 }

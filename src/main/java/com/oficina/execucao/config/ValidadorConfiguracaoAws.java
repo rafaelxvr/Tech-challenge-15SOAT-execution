@@ -72,6 +72,9 @@ final class ValidadorConfiguracaoAws {
                                     List<String> erros) {
         validarSemEndpointNemTabelas(p, erros);
         rejeitarFontes(ENDPOINTS_DO_SDK, ambiente, erros);
+        rejeitarFontes(ARQUIVOS_COMPARTILHADOS, ambiente, erros);
+        rejeitarEndpointNoPerfilEfetivo(".aws/credentials", ambiente.chavesDoPerfilEfetivoEmCredenciais(), erros);
+        rejeitarEndpointNoPerfilEfetivo(".aws/config", ambiente.chavesDoPerfilEfetivoEmConfig(), erros);
         if (vazio(roleArn) || !ROLE_ARN.matcher(roleArn).matches()) erros.add("AWS_ROLE_ARN ausente ou invalido");
         String problemaToken = problemaDoToken(tokenFile);
         if (problemaToken != null) erros.add(problemaToken);
@@ -105,6 +108,14 @@ final class ValidadorConfiguracaoAws {
         }
     }
 
+    /** IRSA: the effective shared profile may not carry an endpoint (STS, SQS or DynamoDB would be diverted). */
+    private static void rejeitarEndpointNoPerfilEfetivo(String arquivo, Set<String> chaves, List<String> erros) {
+        if (chaves.contains(AmbienteAws.ARQUIVO_ILEGIVEL)) erros.add(arquivo + " existe mas nao pode ser lido");
+        for (String chave : CHAVES_DE_ENDPOINT) {
+            if (chaves.contains(chave)) erros.add(arquivo + " (perfil efetivo) nao pode definir " + chave + " (desvia endpoints)");
+        }
+    }
+
     private static void rejeitarPerfilDefault(String arquivo, Set<String> chaves, List<String> erros) {
         if (chaves.contains(AmbienteAws.ARQUIVO_ILEGIVEL)) {
             erros.add(arquivo + " existe mas nao pode ser lido");
@@ -129,6 +140,13 @@ final class ValidadorConfiguracaoAws {
             new FonteProibida("AWS_ENDPOINT_URL_SQS", "aws.endpointUrlSqs", "endpoint override do SQS"),
             new FonteProibida("AWS_ENDPOINT_URL_DYNAMODB", "aws.endpointUrlDynamodb", "endpoint override do DynamoDB"),
             new FonteProibida("AWS_ENDPOINT_URL_STS", "aws.endpointUrlSts", "endpoint override do STS"));
+
+    /** IRSA: alternative shared files could smuggle endpoint_url/services past the default-profile check. */
+    private static final List<FonteProibida> ARQUIVOS_COMPARTILHADOS = List.of(
+            new FonteProibida("AWS_CONFIG_FILE", "aws.configFile", "arquivo de configuracao alternativo"),
+            new FonteProibida("AWS_SHARED_CREDENTIALS_FILE", "aws.sharedCredentialsFile", "arquivo de credenciais alternativo"));
+
+    private static final List<String> CHAVES_DE_ENDPOINT = List.of("endpoint_url", "services");
 
     /** Env/JVM sources the SDK resolves before IMDS, or that redirect/replace IMDS itself. */
     private static final List<FonteProibida> FONTES_PROIBIDAS_NODE_ROLE = List.of(

@@ -24,17 +24,36 @@ public final class AmbienteAws {
     }
 
     public static AmbienteAws doProcesso() {
-        String home = System.getProperty("user.home");
-        return new AmbienteAws(System::getenv, System::getProperty, home == null || home.isBlank() ? null : Path.of(home));
+        return de(System::getenv, System::getProperty);
     }
 
     static AmbienteAws de(Map<String, String> variaveis, Map<String, String> propriedadesJvm) {
-        return new AmbienteAws(variaveis::get, propriedadesJvm::get, null);
+        return de(variaveis::get, propriedadesJvm::get);
     }
 
-    /** Same as {@link #de(Map, Map)} but with the home directory the shared AWS files are read from. */
-    static AmbienteAws de(Map<String, String> variaveis, Map<String, String> propriedadesJvm, Path diretorioHome) {
-        return new AmbienteAws(variaveis::get, propriedadesJvm::get, diretorioHome);
+    /** Same as {@link #de(Map, Map)} but with the {@code user.home} the shared AWS files fall back to (env HOME wins). */
+    static AmbienteAws de(Map<String, String> variaveis, Map<String, String> propriedadesJvm, Path userHome) {
+        Map<String, String> props = new java.util.HashMap<>(propriedadesJvm);
+        if (userHome != null) props.put(USER_HOME, userHome.toString());
+        return de(variaveis, props);
+    }
+
+    private static AmbienteAws de(Function<String, String> variaveis, Function<String, String> propriedadesJvm) {
+        return new AmbienteAws(variaveis, propriedadesJvm, resolverHome(variaveis, propriedadesJvm));
+    }
+
+    private static final String USER_HOME = "user.home";
+
+    /** Same order the SDK uses (UserHomeDirectoryUtils): env HOME first, then the user.home property. */
+    private static Path resolverHome(Function<String, String> variaveis, Function<String, String> propriedadesJvm) {
+        String home = variaveis.apply("HOME");
+        if (!preenchido(home)) home = propriedadesJvm.apply(USER_HOME);
+        if (!preenchido(home)) return null;
+        try {
+            return Path.of(home);
+        } catch (java.nio.file.InvalidPathException e) {
+            return null;
+        }
     }
 
     /** True when the environment variable or the JVM property is set to a non-blank value. */
@@ -44,15 +63,28 @@ public final class AmbienteAws {
     }
 
     /** Keys set in the [default] profile of ~/.aws/credentials (a null return would hide read failures, so none). */
-    Set<String> chavesDoPerfilDefaultEmCredenciais() { return chaves(".aws/credentials", false); }
+    Set<String> chavesDoPerfilDefaultEmCredenciais() { return chaves(".aws/credentials", false, "default"); }
 
     /** Keys set in the [default] / [profile default] section of ~/.aws/config. */
-    Set<String> chavesDoPerfilDefaultEmConfig() { return chaves(".aws/config", true); }
+    Set<String> chavesDoPerfilDefaultEmConfig() { return chaves(".aws/config", true, "default"); }
+
+    /** Profile the SDK picks: AWS_PROFILE, then aws.profile, else default. */
+    String perfilEfetivo() {
+        String nome = variaveis.apply("AWS_PROFILE");
+        if (!preenchido(nome)) nome = propriedadesJvm.apply("aws.profile");
+        return preenchido(nome) ? nome.strip() : "default";
+    }
+
+    /** Keys of the effective profile in ~/.aws/credentials. */
+    Set<String> chavesDoPerfilEfetivoEmCredenciais() { return chaves(".aws/credentials", false, perfilEfetivo()); }
+
+    /** Keys of the effective profile in ~/.aws/config. */
+    Set<String> chavesDoPerfilEfetivoEmConfig() { return chaves(".aws/config", true, perfilEfetivo()); }
 
     /** Fails closed: an existing file that cannot be read is reported through {@link #ARQUIVO_ILEGIVEL}. */
     static final String ARQUIVO_ILEGIVEL = "<arquivo ilegivel>";
 
-    private Set<String> chaves(String relativo, boolean config) {
+    private Set<String> chaves(String relativo, boolean config, String perfil) {
         Set<String> chaves = new HashSet<>();
         if (diretorioHome == null) return chaves;
         Path arquivo = diretorioHome.resolve(relativo);
@@ -66,7 +98,8 @@ public final class AmbienteAws {
                     int fim = l.indexOf(']');
                     String secao = fim < 0 ? l.substring(1) : l.substring(1, fim);
                     secao = secao.strip();
-                    noPerfil = secao.equals("default") || (config && secao.replaceAll("\\s+", " ").equals("profile default"));
+                    String normalizada = secao.replaceAll("\\s+", " ");
+                    noPerfil = normalizada.equals(perfil) || (config && normalizada.equals("profile " + perfil));
                 } else if (noPerfil && l.indexOf('=') > 0 && !linha.startsWith(" ") && !linha.startsWith("\t")) {
                     chaves.add(l.substring(0, l.indexOf('=')).strip().toLowerCase());
                 }
