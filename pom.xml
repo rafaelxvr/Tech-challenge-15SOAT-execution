@@ -26,6 +26,9 @@
         <jacoco.version>0.8.11</jacoco.version>
         <awaitility.version>4.2.1</awaitility.version>
         <jjwt.version>0.12.5</jjwt.version>
+        <!-- Overrides do BOM do Spring Boot 3.5.16 (UNR-833): versões gerenciadas têm HIGH/CRITICAL corrigíveis. -->
+        <tomcat.version>10.1.61</tomcat.version>
+        <jackson-bom.version>2.21.8</jackson-bom.version>
         <sonar.organization>rafaelxvr</sonar.organization>
         <sonar.projectKey>rafaelxvr_Tech-challenge-15SOAT-execution</sonar.projectKey>
         <sonar.host.url>https://sonarcloud.io</sonar.host.url>

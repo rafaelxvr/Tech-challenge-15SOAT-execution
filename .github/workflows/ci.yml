@@ -143,6 +143,7 @@ jobs:
     env:
       REGISTRY: ghcr.io
       IMAGE_NAME: oficina-execution-service
+      TRIVY_IMAGE: aquasec/trivy@sha256:ab70a02200597efa04748f210f793936eb647cbcdb0ea69cc30b226d6f5a22c7 # 0.58.1
     outputs:
       image_base: ${{ steps.names.outputs.image_base }}
       digest: ${{ steps.build.outputs.digest }}
@@ -179,6 +180,25 @@ jobs:
           tags: |
             type=sha,prefix=,format=long
 
+      # Scan da imagem ANTES do push (UNR-833): o Trivy fs sobre pom.xml não enxerga versões
+      # vindas do BOM do Spring Boot; só a imagem montada revela o classpath efetivo.
+      - name: Build da imagem para scan (sem push)
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: .
+          push: false
+          load: true
+          tags: execution-scan:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Scan da imagem (Trivy image; falha em HIGH/CRITICAL com correção)
+        env:
+          IMAGE_REF: execution-scan:${{ github.sha }}
+        run: |
+          set +x
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "$PWD:/src:ro"             "$TRIVY_IMAGE" image --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed             --ignorefile /src/.trivyignore.yaml --exit-code 1 "$IMAGE_REF"
+
       - name: Build e push
         id: build
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
@@ -187,6 +207,7 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
 
       - name: Resumo da imagem publicada
         env:
