@@ -24,13 +24,18 @@ final class ValidadorConfiguracaoAws {
     private ValidadorConfiguracaoAws() {}
 
     static void validar(ExecucaoProperties p, String roleArn, String tokenFile) {
+        validar(p, roleArn, tokenFile, null);
+    }
+
+    static void validar(ExecucaoProperties p, String roleArn, String tokenFile, String accessKeyId) {
         if (p.modo() == null) {
-            throw new IllegalStateException("execucao.modo e obrigatorio: use LOCALSTACK ou IRSA (EXECUCAO_AWS_MODO)");
+            throw new IllegalStateException("execucao.modo e obrigatorio: use LOCALSTACK, IRSA ou NODE_ROLE (EXECUCAO_AWS_MODO)");
         }
         List<String> erros = new ArrayList<>();
         switch (p.modo()) {
             case LOCALSTACK -> validarLocalstack(p, erros);
             case IRSA -> validarIrsa(p, roleArn, tokenFile, erros);
+            case NODE_ROLE -> validarNodeRole(p, accessKeyId, erros);
         }
         if (!erros.isEmpty()) {
             throw new IllegalStateException("Configuracao AWS invalida no modo " + p.modo() + ": " + String.join("; ", erros));
@@ -68,12 +73,22 @@ final class ValidadorConfiguracaoAws {
     }
 
     private static void validarIrsa(ExecucaoProperties p, String roleArn, String tokenFile, List<String> erros) {
-        if (!vazio(p.dynamodb().endpoint())) erros.add("execucao.dynamodb.endpoint nao pode ser definido");
-        if (!vazio(p.mensageria().endpoint())) erros.add("execucao.mensageria.endpoint nao pode ser definido");
-        if (p.dynamodb().criarTabelas()) erros.add("execucao.dynamodb.criar-tabelas nao pode ser true (tabelas vem do Terraform)");
+        validarSemEndpointNemTabelas(p, erros);
         if (vazio(roleArn) || !ROLE_ARN.matcher(roleArn).matches()) erros.add("AWS_ROLE_ARN ausente ou invalido");
         String problemaToken = problemaDoToken(tokenFile);
         if (problemaToken != null) erros.add(problemaToken);
+    }
+
+    /** NODE_ROLE uses the default credentials chain (instance profile): no role/token inputs, no static key. */
+    private static void validarNodeRole(ExecucaoProperties p, String accessKeyId, List<String> erros) {
+        validarSemEndpointNemTabelas(p, erros);
+        if (!vazio(accessKeyId)) erros.add("AWS_ACCESS_KEY_ID nao pode ser definido (use a role do no)");
+    }
+
+    private static void validarSemEndpointNemTabelas(ExecucaoProperties p, List<String> erros) {
+        if (!vazio(p.dynamodb().endpoint())) erros.add("execucao.dynamodb.endpoint nao pode ser definido");
+        if (!vazio(p.mensageria().endpoint())) erros.add("execucao.mensageria.endpoint nao pode ser definido");
+        if (p.dynamodb().criarTabelas()) erros.add("execucao.dynamodb.criar-tabelas nao pode ser true (tabelas vem do Terraform)");
     }
 
     private static String problemaDoToken(String tokenFile) {

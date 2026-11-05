@@ -15,7 +15,7 @@ management:
       show-details: never
 
 execucao:
-  # LOCALSTACK or IRSA; no default on purpose, so a missing value aborts startup instead of guessing.
+  # LOCALSTACK, IRSA or NODE_ROLE; no default on purpose, so a missing value aborts startup instead of guessing.
   modo: ${EXECUCAO_AWS_MODO:}
   filiais: ${EXECUCAO_FILIAIS:MATRIZ}
   capacidade:

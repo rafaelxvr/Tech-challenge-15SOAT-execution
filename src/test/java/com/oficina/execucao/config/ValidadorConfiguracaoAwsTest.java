@@ -109,4 +109,41 @@ class ValidadorConfiguracaoAwsTest {
         assertThatThrownBy(() -> ValidadorConfiguracaoAws.validar(props(Modo.IRSA, LOCAL, "", false), "ruim", t))
                 .message().doesNotContain("SEGREDO-JWT");
     }
+
+    @Test void nodeRoleValidoPassaSemRoleNemToken() {
+        assertThatCode(() -> ValidadorConfiguracaoAws.validar(props(Modo.NODE_ROLE, "", "", false), "", "", ""))
+                .doesNotThrowAnyException();
+        assertThatCode(() -> ValidadorConfiguracaoAws.validar(props(Modo.NODE_ROLE, null, null, false), null, null, null))
+                .doesNotThrowAnyException();
+    }
+
+    @Test void nodeRoleRejeitaEndpointOverride() {
+        assertThatThrownBy(() -> ValidadorConfiguracaoAws.validar(props(Modo.NODE_ROLE, LOCAL, "", false), "", "", ""))
+                .hasMessageContaining("execucao.dynamodb.endpoint");
+        assertThatThrownBy(() -> ValidadorConfiguracaoAws.validar(props(Modo.NODE_ROLE, "", LOCAL, false), "", "", ""))
+                .hasMessageContaining("execucao.mensageria.endpoint");
+    }
+
+    @Test void nodeRoleRejeitaCriarTabelas() {
+        assertThatThrownBy(() -> ValidadorConfiguracaoAws.validar(props(Modo.NODE_ROLE, "", "", true), "", "", ""))
+                .hasMessageContaining("criar-tabelas");
+    }
+
+    @Test void nodeRoleRejeitaChaveEstaticaSemVazarValor() {
+        assertThatThrownBy(() -> ValidadorConfiguracaoAws.validar(props(Modo.NODE_ROLE, "", "", false), "", "", "AKIASEGREDO"))
+                .hasMessageContaining("AWS_ACCESS_KEY_ID").message().doesNotContain("AKIASEGREDO");
+    }
+
+    @Test void irsaELocalstackContinuamIndependentesDaChaveEstatica() throws Exception {
+        String t = token("x");
+        assertThatCode(() -> ValidadorConfiguracaoAws.validar(props(Modo.IRSA, "", "", false), ROLE, t))
+                .doesNotThrowAnyException();
+        assertThatCode(() -> ValidadorConfiguracaoAws.validar(props(Modo.LOCALSTACK, LOCAL, LOCAL, true), "", "", "test"))
+                .doesNotThrowAnyException();
+    }
+
+    @Test void irsaAindaExigeRoleETokenAoLadoDoNodeRole() {
+        assertThatThrownBy(() -> ValidadorConfiguracaoAws.validar(props(Modo.IRSA, "", "", false), "", ""))
+                .hasMessageContaining("AWS_ROLE_ARN").hasMessageContaining("AWS_WEB_IDENTITY_TOKEN_FILE");
+    }
 }

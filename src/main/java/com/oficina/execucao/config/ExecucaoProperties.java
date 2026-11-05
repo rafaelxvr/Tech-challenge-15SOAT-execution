@@ -7,7 +7,7 @@ import java.util.List;
 @ConfigurationProperties(prefix = "execucao")
 public record ExecucaoProperties(Modo modo, List<String> filiais, Capacidade capacidade, Mensageria mensageria, Dynamodb dynamodb) {
     /** Where the AWS clients point: local emulator with static test credentials, or the real cloud through IRSA. */
-    public enum Modo { LOCALSTACK, IRSA }
+    public enum Modo { LOCALSTACK, IRSA, NODE_ROLE }
 
     public record Capacidade(int reparosPorFilial) {}
 
