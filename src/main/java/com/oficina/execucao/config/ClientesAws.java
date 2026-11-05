@@ -34,16 +34,12 @@ public final class ClientesAws implements AutoCloseable {
         this.sqsRecepcao = sqsRecepcao;
     }
 
-    public static ClientesAws criar(ExecucaoProperties p, String roleArn, String tokenFile) {
-        return criar(p, roleArn, tokenFile, null);
-    }
-
-    public static ClientesAws criar(ExecucaoProperties p, String roleArn, String tokenFile, String accessKeyId) {
+    public static ClientesAws criar(ExecucaoProperties p, String roleArn, String tokenFile, AmbienteAws ambiente) {
         List<AutoCloseable> recursos = new ArrayList<>();
         SdkHttpClient http = UrlConnectionHttpClient.builder().connectionTimeout(Duration.ofSeconds(1))
                 .socketTimeout(Duration.ofSeconds(15)).build();
         recursos.add(http);
-        ValidadorConfiguracaoAws.validar(p, roleArn, tokenFile, accessKeyId);
+        ValidadorConfiguracaoAws.validar(p, roleArn, tokenFile, ambiente);
         String dynamoEndpoint = p.dynamodb().endpoint();
         String sqsEndpoint = p.mensageria().endpoint();
         AwsCredentialsProvider irsa = null;

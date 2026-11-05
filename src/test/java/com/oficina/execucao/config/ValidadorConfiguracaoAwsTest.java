@@ -7,6 +7,7 @@ import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -16,6 +17,14 @@ class ValidadorConfiguracaoAwsTest {
     private static final String LOCAL = "http://localhost:4566";
 
     @TempDir Path dir;
+
+    private static AmbienteAws ambiente(Map<String, String> variaveis, Map<String, String> propriedadesJvm) {
+        return AmbienteAws.de(variaveis, propriedadesJvm);
+    }
+
+    private static void validarLimpo(ExecucaoProperties p, String roleArn, String tokenFile) {
+        ValidadorConfiguracaoAws.validar(p, roleArn, tokenFile, ambiente(Map.of(), Map.of()));
+    }
 
     private static ExecucaoProperties props(Modo modo, String dynamo, String sqs, boolean criar) {
         return new ExecucaoProperties(modo, List.of("MATRIZ"), new ExecucaoProperties.Capacidade(5),
@@ -28,26 +37,26 @@ class ValidadorConfiguracaoAwsTest {
     }
 
     @Test void modoAusenteAbortaStartup() {
-        assertThatThrownBy(() -> ValidadorConfiguracaoAws.validar(props(null, LOCAL, LOCAL, true), "", ""))
+        assertThatThrownBy(() -> validarLimpo(props(null, LOCAL, LOCAL, true), "", ""))
                 .isInstanceOf(IllegalStateException.class).hasMessageContaining("execucao.modo");
     }
 
     @Test void localstackComAmbosEndpointsPassa() {
-        assertThatCode(() -> ValidadorConfiguracaoAws.validar(props(Modo.LOCALSTACK, LOCAL, LOCAL, true), "", ""))
+        assertThatCode(() -> validarLimpo(props(Modo.LOCALSTACK, LOCAL, LOCAL, true), "", ""))
                 .doesNotThrowAnyException();
     }
 
     @Test void localstackComEndpointParcialAborta() {
-        assertThatThrownBy(() -> ValidadorConfiguracaoAws.validar(props(Modo.LOCALSTACK, LOCAL, "", true), "", ""))
+        assertThatThrownBy(() -> validarLimpo(props(Modo.LOCALSTACK, LOCAL, "", true), "", ""))
                 .hasMessageContaining("execucao.mensageria.endpoint");
-        assertThatThrownBy(() -> ValidadorConfiguracaoAws.validar(props(Modo.LOCALSTACK, null, LOCAL, true), "", ""))
+        assertThatThrownBy(() -> validarLimpo(props(Modo.LOCALSTACK, null, LOCAL, true), "", ""))
                 .hasMessageContaining("execucao.dynamodb.endpoint");
     }
 
     @Test void localstackAceitaHostsPermitidos() {
         for (String host : List.of("http://127.0.0.1:4566", "http://localhost:4566", "http://[::1]:4566",
                 "http://localstack.infra.svc:4566")) {
-            assertThatCode(() -> ValidadorConfiguracaoAws.validar(props(Modo.LOCALSTACK, host, host, true), "", ""))
+            assertThatCode(() -> validarLimpo(props(Modo.LOCALSTACK, host, host, true), "", ""))
                     .doesNotThrowAnyException();
         }
     }
@@ -57,93 +66,153 @@ class ValidadorConfiguracaoAwsTest {
                 "http://localhost.evil.com:4566", "not a uri", "localhost:4566", "//localhost:4566", " http://localhost:4566",
                 "ftp://localhost:4566", "http://localhost@evil.com", "http://localhost:4566@evil.com",
                 "http://evil.com#@localhost", "http://localhost.", "http://[::ffff:127.0.0.1]:4566")) {
-            assertThatThrownBy(() -> ValidadorConfiguracaoAws.validar(props(Modo.LOCALSTACK, host, LOCAL, true), "", ""))
+            assertThatThrownBy(() -> validarLimpo(props(Modo.LOCALSTACK, host, LOCAL, true), "", ""))
                     .hasMessageContaining("execucao.dynamodb.endpoint deve apontar");
-            assertThatThrownBy(() -> ValidadorConfiguracaoAws.validar(props(Modo.LOCALSTACK, LOCAL, host, true), "", ""))
+            assertThatThrownBy(() -> validarLimpo(props(Modo.LOCALSTACK, LOCAL, host, true), "", ""))
                     .hasMessageContaining("execucao.mensageria.endpoint deve apontar");
         }
     }
 
     @Test void irsaValidoPassa() throws Exception {
         String t = token("segredo");
-        assertThatCode(() -> ValidadorConfiguracaoAws.validar(props(Modo.IRSA, "", "", false), ROLE, t))
+        assertThatCode(() -> validarLimpo(props(Modo.IRSA, "", "", false), ROLE, t))
                 .doesNotThrowAnyException();
     }
 
     @Test void irsaRejeitaEndpointLocal() throws Exception {
         String t = token("x");
-        assertThatThrownBy(() -> ValidadorConfiguracaoAws.validar(props(Modo.IRSA, LOCAL, "", false), ROLE, t))
+        assertThatThrownBy(() -> validarLimpo(props(Modo.IRSA, LOCAL, "", false), ROLE, t))
                 .hasMessageContaining("execucao.dynamodb.endpoint");
-        assertThatThrownBy(() -> ValidadorConfiguracaoAws.validar(props(Modo.IRSA, "", LOCAL, false), ROLE, t))
+        assertThatThrownBy(() -> validarLimpo(props(Modo.IRSA, "", LOCAL, false), ROLE, t))
                 .hasMessageContaining("execucao.mensageria.endpoint");
     }
 
     @Test void irsaRejeitaCriarTabelas() throws Exception {
         String t = token("x");
-        assertThatThrownBy(() -> ValidadorConfiguracaoAws.validar(props(Modo.IRSA, "", "", true), ROLE, t))
+        assertThatThrownBy(() -> validarLimpo(props(Modo.IRSA, "", "", true), ROLE, t))
                 .hasMessageContaining("criar-tabelas");
     }
 
     @Test void irsaRejeitaRoleInvalida() throws Exception {
         String t = token("x");
-        assertThatThrownBy(() -> ValidadorConfiguracaoAws.validar(props(Modo.IRSA, "", "", false), "", t))
+        assertThatThrownBy(() -> validarLimpo(props(Modo.IRSA, "", "", false), "", t))
                 .hasMessageContaining("AWS_ROLE_ARN");
-        assertThatThrownBy(() -> ValidadorConfiguracaoAws.validar(props(Modo.IRSA, "", "", false), "role-qualquer", t))
+        assertThatThrownBy(() -> validarLimpo(props(Modo.IRSA, "", "", false), "role-qualquer", t))
                 .hasMessageContaining("AWS_ROLE_ARN");
     }
 
     @Test void irsaRejeitaTokenInvalido() throws Exception {
         var p = props(Modo.IRSA, "", "", false);
-        assertThatThrownBy(() -> ValidadorConfiguracaoAws.validar(p, ROLE, ""))
+        assertThatThrownBy(() -> validarLimpo(p, ROLE, ""))
                 .hasMessageContaining("AWS_WEB_IDENTITY_TOKEN_FILE ausente");
-        assertThatThrownBy(() -> ValidadorConfiguracaoAws.validar(p, ROLE, dir.resolve("nao-existe").toString()))
+        assertThatThrownBy(() -> validarLimpo(p, ROLE, dir.resolve("nao-existe").toString()))
                 .hasMessageContaining("nao e um arquivo existente");
-        assertThatThrownBy(() -> ValidadorConfiguracaoAws.validar(p, ROLE, dir.toString()))
+        assertThatThrownBy(() -> validarLimpo(p, ROLE, dir.toString()))
                 .hasMessageContaining("nao e um arquivo existente");
         String vazio = token("");
-        assertThatThrownBy(() -> ValidadorConfiguracaoAws.validar(p, ROLE, vazio)).hasMessageContaining("vazio");
+        assertThatThrownBy(() -> validarLimpo(p, ROLE, vazio)).hasMessageContaining("vazio");
     }
 
     @Test void mensagemNuncaContemConteudoDoToken() throws Exception {
         String t = token("SEGREDO-JWT");
-        assertThatThrownBy(() -> ValidadorConfiguracaoAws.validar(props(Modo.IRSA, LOCAL, "", false), "ruim", t))
+        assertThatThrownBy(() -> validarLimpo(props(Modo.IRSA, LOCAL, "", false), "ruim", t))
                 .message().doesNotContain("SEGREDO-JWT");
     }
 
     @Test void nodeRoleValidoPassaSemRoleNemToken() {
-        assertThatCode(() -> ValidadorConfiguracaoAws.validar(props(Modo.NODE_ROLE, "", "", false), "", "", ""))
+        assertThatCode(() -> validarLimpo(props(Modo.NODE_ROLE, "", "", false), "", ""))
                 .doesNotThrowAnyException();
-        assertThatCode(() -> ValidadorConfiguracaoAws.validar(props(Modo.NODE_ROLE, null, null, false), null, null, null))
+        assertThatCode(() -> validarLimpo(props(Modo.NODE_ROLE, null, null, false), null, null))
                 .doesNotThrowAnyException();
     }
 
     @Test void nodeRoleRejeitaEndpointOverride() {
-        assertThatThrownBy(() -> ValidadorConfiguracaoAws.validar(props(Modo.NODE_ROLE, LOCAL, "", false), "", "", ""))
+        assertThatThrownBy(() -> validarLimpo(props(Modo.NODE_ROLE, LOCAL, "", false), "", ""))
                 .hasMessageContaining("execucao.dynamodb.endpoint");
-        assertThatThrownBy(() -> ValidadorConfiguracaoAws.validar(props(Modo.NODE_ROLE, "", LOCAL, false), "", "", ""))
+        assertThatThrownBy(() -> validarLimpo(props(Modo.NODE_ROLE, "", LOCAL, false), "", ""))
                 .hasMessageContaining("execucao.mensageria.endpoint");
     }
 
     @Test void nodeRoleRejeitaCriarTabelas() {
-        assertThatThrownBy(() -> ValidadorConfiguracaoAws.validar(props(Modo.NODE_ROLE, "", "", true), "", "", ""))
+        assertThatThrownBy(() -> validarLimpo(props(Modo.NODE_ROLE, "", "", true), "", ""))
                 .hasMessageContaining("criar-tabelas");
     }
 
     @Test void nodeRoleRejeitaChaveEstaticaSemVazarValor() {
-        assertThatThrownBy(() -> ValidadorConfiguracaoAws.validar(props(Modo.NODE_ROLE, "", "", false), "", "", "AKIASEGREDO"))
+        assertThatThrownBy(() -> ValidadorConfiguracaoAws.validar(props(Modo.NODE_ROLE, "", "", false), "", "", ambiente(Map.of("AWS_ACCESS_KEY_ID", "AKIASEGREDO"), Map.of())))
                 .hasMessageContaining("AWS_ACCESS_KEY_ID").message().doesNotContain("AKIASEGREDO");
     }
 
     @Test void irsaELocalstackContinuamIndependentesDaChaveEstatica() throws Exception {
         String t = token("x");
-        assertThatCode(() -> ValidadorConfiguracaoAws.validar(props(Modo.IRSA, "", "", false), ROLE, t))
+        assertThatCode(() -> validarLimpo(props(Modo.IRSA, "", "", false), ROLE, t))
                 .doesNotThrowAnyException();
-        assertThatCode(() -> ValidadorConfiguracaoAws.validar(props(Modo.LOCALSTACK, LOCAL, LOCAL, true), "", "", "test"))
+        assertThatCode(() -> validarLimpo(props(Modo.LOCALSTACK, LOCAL, LOCAL, true), "", ""))
                 .doesNotThrowAnyException();
     }
 
     @Test void irsaAindaExigeRoleETokenAoLadoDoNodeRole() {
-        assertThatThrownBy(() -> ValidadorConfiguracaoAws.validar(props(Modo.IRSA, "", "", false), "", ""))
+        assertThatThrownBy(() -> validarLimpo(props(Modo.IRSA, "", "", false), "", ""))
                 .hasMessageContaining("AWS_ROLE_ARN").hasMessageContaining("AWS_WEB_IDENTITY_TOKEN_FILE");
+    }
+
+    private static void validarNodeRole(Map<String, String> variaveis, Map<String, String> propriedadesJvm) {
+        ValidadorConfiguracaoAws.validar(props(Modo.NODE_ROLE, "", "", false), "", "", ambiente(variaveis, propriedadesJvm));
+    }
+
+    @Test void nodeRoleRejeitaEndpointsDefinidosForaDasPropertiesSpring() {
+        for (String nome : List.of("AWS_ENDPOINT_URL", "AWS_ENDPOINT_URL_SQS", "AWS_ENDPOINT_URL_DYNAMODB")) {
+            assertThatThrownBy(() -> validarNodeRole(Map.of(nome, "http://evil.example:4566"), Map.of()))
+                    .hasMessageContaining(nome).message().doesNotContain("evil.example");
+        }
+        for (String nome : List.of("aws.endpointUrl", "aws.endpointUrlSqs", "aws.endpointUrlDynamodb")) {
+            assertThatThrownBy(() -> validarNodeRole(Map.of(), Map.of(nome, "http://evil.example:4566")))
+                    .hasMessageContaining(nome).message().doesNotContain("evil.example");
+        }
+    }
+
+    @Test void nodeRoleRejeitaFontesDeCredencialAnterioresAoImds() {
+        List<String> variaveis = List.of("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN",
+                "AWS_WEB_IDENTITY_TOKEN_FILE", "AWS_PROFILE", "AWS_SHARED_CREDENTIALS_FILE",
+                "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI", "AWS_CONTAINER_CREDENTIALS_FULL_URI",
+                "AWS_CONTAINER_AUTHORIZATION_TOKEN", "AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE");
+        for (String nome : variaveis) {
+            assertThatThrownBy(() -> validarNodeRole(Map.of(nome, "VALOR-SEGREDO"), Map.of()))
+                    .hasMessageContaining(nome).message().doesNotContain("VALOR-SEGREDO");
+        }
+        for (String nome : List.of("aws.accessKeyId", "aws.secretAccessKey", "aws.sessionToken",
+                "aws.webIdentityTokenFile", "aws.profile", "aws.sharedCredentialsFile")) {
+            assertThatThrownBy(() -> validarNodeRole(Map.of(), Map.of(nome, "VALOR-SEGREDO")))
+                    .hasMessageContaining(nome).message().doesNotContain("VALOR-SEGREDO");
+        }
+    }
+
+    @Test void nodeRoleRejeitaRoleArnETokenDeWebIdentityRecebidosPorParametro() {
+        assertThatThrownBy(() -> ValidadorConfiguracaoAws.validar(props(Modo.NODE_ROLE, "", "", false), ROLE, "",
+                ambiente(Map.of(), Map.of()))).hasMessageContaining("AWS_ROLE_ARN").message().doesNotContain(ROLE);
+        assertThatThrownBy(() -> ValidadorConfiguracaoAws.validar(props(Modo.NODE_ROLE, "", "", false), "", "/var/run/token",
+                ambiente(Map.of(), Map.of()))).hasMessageContaining("AWS_WEB_IDENTITY_TOKEN_FILE")
+                .message().doesNotContain("/var/run/token");
+    }
+
+    @Test void nodeRoleRejeitaImdsDesabilitado() {
+        assertThatThrownBy(() -> validarNodeRole(Map.of("AWS_EC2_METADATA_DISABLED", "true"), Map.of()))
+                .hasMessageContaining("AWS_EC2_METADATA_DISABLED");
+        assertThatCode(() -> validarNodeRole(Map.of("AWS_EC2_METADATA_DISABLED", "false", "AWS_REGION", "us-east-1"), Map.of()))
+                .doesNotThrowAnyException();
+    }
+
+    @Test void nodeRoleIgnoraValoresEmBranco() {
+        assertThatCode(() -> validarNodeRole(Map.of("AWS_ACCESS_KEY_ID", " "), Map.of("aws.profile", "")))
+                .doesNotThrowAnyException();
+    }
+
+    @Test void irsaELocalstackIgnoramFontesDoAmbiente() throws Exception {
+        String t = token("x");
+        var ambiente = ambiente(Map.of("AWS_ACCESS_KEY_ID", "test", "AWS_ENDPOINT_URL", LOCAL), Map.of());
+        assertThatCode(() -> ValidadorConfiguracaoAws.validar(props(Modo.IRSA, "", "", false), ROLE, t, ambiente))
+                .doesNotThrowAnyException();
+        assertThatCode(() -> ValidadorConfiguracaoAws.validar(props(Modo.LOCALSTACK, LOCAL, LOCAL, true), "", "", ambiente))
+                .doesNotThrowAnyException();
     }
 }
