@@ -59,4 +59,11 @@ class ClientesAwsNodeRoleTest {
                 .isInstanceOf(IllegalStateException.class).hasMessageContaining("aws.accessKeyId")
                 .message().doesNotContain("AKIASEGREDO");
     }
+
+    @Test void irsaComEndpointGlobalNaoMontaClientes() {
+        var ambiente = AmbienteAws.de(Map.of("AWS_ENDPOINT_URL", "http://evil.example:4566"), Map.of());
+        assertThatThrownBy(() -> ClientesAws.criar(props(Modo.IRSA, ""), "arn:aws:iam::123456789012:role/r", "/nao/existe", ambiente))
+                .isInstanceOf(IllegalStateException.class).hasMessageContaining("AWS_ENDPOINT_URL")
+                .message().doesNotContain("evil.example");
+    }
 }

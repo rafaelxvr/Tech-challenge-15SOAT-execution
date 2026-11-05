@@ -3,6 +3,8 @@ package com.oficina.execucao.config;
 import com.oficina.execucao.config.ExecucaoProperties.Modo;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -207,12 +209,118 @@ class ValidadorConfiguracaoAwsTest {
                 .doesNotThrowAnyException();
     }
 
-    @Test void irsaELocalstackIgnoramFontesDoAmbiente() throws Exception {
+    @Test void localstackIgnoraFontesDoAmbiente() {
+        var ambiente = ambiente(Map.of("AWS_ACCESS_KEY_ID", "test", "AWS_ENDPOINT_URL", LOCAL,
+                "AWS_EC2_METADATA_DISABLED", "true"), Map.of("aws.configFile", "/x"));
+        assertThatCode(() -> ValidadorConfiguracaoAws.validar(props(Modo.LOCALSTACK, LOCAL, LOCAL, true), "", "", ambiente))
+                .doesNotThrowAnyException();
+    }
+
+    @Test void irsaIgnoraChaveEstaticaMasValidaComAmbienteLimpo() throws Exception {
         String t = token("x");
-        var ambiente = ambiente(Map.of("AWS_ACCESS_KEY_ID", "test", "AWS_ENDPOINT_URL", LOCAL), Map.of());
+        var ambiente = ambiente(Map.of("AWS_ACCESS_KEY_ID", "test"), Map.of());
         assertThatCode(() -> ValidadorConfiguracaoAws.validar(props(Modo.IRSA, "", "", false), ROLE, t, ambiente))
                 .doesNotThrowAnyException();
-        assertThatCode(() -> ValidadorConfiguracaoAws.validar(props(Modo.LOCALSTACK, LOCAL, LOCAL, true), "", "", ambiente))
+    }
+
+    // E1: IRSA nao aceita endpoint redirecionado por env/JVM
+    @ParameterizedTest @ValueSource(strings = {"AWS_ENDPOINT_URL", "AWS_ENDPOINT_URL_SQS", "AWS_ENDPOINT_URL_DYNAMODB",
+            "AWS_ENDPOINT_URL_STS"})
+    void irsaRejeitaEndpointPorVariavel(String nome) throws Exception {
+        String t = token("x");
+        assertThatThrownBy(() -> ValidadorConfiguracaoAws.validar(props(Modo.IRSA, "", "", false), ROLE, t,
+                ambiente(Map.of(nome, "http://evil.example:4566"), Map.of())))
+                .hasMessageContaining(nome).message().doesNotContain("evil.example");
+    }
+
+    @ParameterizedTest @ValueSource(strings = {"aws.endpointUrl", "aws.endpointUrlSqs", "aws.endpointUrlDynamodb",
+            "aws.endpointUrlSts"})
+    void irsaRejeitaEndpointPorPropriedadeJvm(String nome) throws Exception {
+        String t = token("x");
+        assertThatThrownBy(() -> ValidadorConfiguracaoAws.validar(props(Modo.IRSA, "", "", false), ROLE, t,
+                ambiente(Map.of(), Map.of(nome, "http://evil.example:4566"))))
+                .hasMessageContaining(nome).message().doesNotContain("evil.example");
+    }
+
+    // E2: NODE_ROLE nao aceita fontes de container/role por JVM nem endpoint de container
+    @ParameterizedTest @ValueSource(strings = {"AWS_CONTAINER_SERVICE_ENDPOINT", "AWS_EC2_METADATA_SERVICE_ENDPOINT"})
+    void nodeRoleRejeitaEndpointsDeCredencialPorVariavel(String nome) {
+        assertThatThrownBy(() -> validarNodeRole(Map.of(nome, "http://evil.example"), Map.of()))
+                .hasMessageContaining(nome).message().doesNotContain("evil.example");
+    }
+
+    @ParameterizedTest @ValueSource(strings = {"aws.containerCredentialsPath", "aws.containerCredentialsFullUri",
+            "aws.containerAuthorizationToken", "aws.containerAuthorizationTokenFile", "aws.roleArn",
+            "aws.containerServiceEndpoint", "aws.configFile", "aws.ec2MetadataServiceEndpoint"})
+    void nodeRoleRejeitaFontesProibidasPorPropriedadeJvm(String nome) {
+        assertThatThrownBy(() -> validarNodeRole(Map.of(), Map.of(nome, "VALOR-SEGREDO")))
+                .hasMessageContaining(nome).message().doesNotContain("VALOR-SEGREDO");
+    }
+
+    // E3: AWS_CONFIG_FILE e perfil default compartilhado
+    @Test void nodeRoleRejeitaAwsConfigFile() {
+        assertThatThrownBy(() -> validarNodeRole(Map.of("AWS_CONFIG_FILE", "/tmp/segredo-config"), Map.of()))
+                .hasMessageContaining("AWS_CONFIG_FILE").message().doesNotContain("segredo-config");
+    }
+
+    private void escrever(String arquivo, String conteudo) throws Exception {
+        Path alvo = dir.resolve(".aws").resolve(arquivo);
+        Files.createDirectories(alvo.getParent());
+        Files.writeString(alvo, conteudo);
+    }
+
+    private void validarNodeRoleComHome() {
+        ValidadorConfiguracaoAws.validar(props(Modo.NODE_ROLE, "", "", false), "", "",
+                AmbienteAws.de(Map.of(), Map.of(), dir));
+    }
+
+    @ParameterizedTest @ValueSource(strings = {"aws_access_key_id", "aws_secret_access_key", "aws_session_token",
+            "credential_process", "web_identity_token_file", "role_arn", "source_profile", "sso_session"})
+    void nodeRoleRejeitaPerfilDefaultDeCredenciaisCompartilhadas(String chave) throws Exception {
+        escrever("credentials", "[other]\nx=1\n\n[default]\n" + chave + " = VALOR-SEGREDO\n");
+        assertThatThrownBy(this::validarNodeRoleComHome)
+                .hasMessageContaining(".aws/credentials").hasMessageContaining(chave)
+                .message().doesNotContain("VALOR-SEGREDO");
+    }
+
+    @ParameterizedTest @ValueSource(strings = {"[default]", "[profile default]", "[ profile   default ]"})
+    void nodeRoleRejeitaPerfilDefaultDoConfig(String secao) throws Exception {
+        escrever("config", "# c\n" + secao + "\nregion = us-east-1\nendpoint_url = http://evil.example\n");
+        assertThatThrownBy(this::validarNodeRoleComHome)
+                .hasMessageContaining(".aws/config").hasMessageContaining("endpoint_url")
+                .message().doesNotContain("evil.example");
+    }
+
+    @Test void nodeRoleRejeitaImdsRedirecionadoNoConfig() throws Exception {
+        escrever("config", "[default]\nec2_metadata_service_endpoint = http://evil.example\n");
+        assertThatThrownBy(this::validarNodeRoleComHome).hasMessageContaining("ec2_metadata_service_endpoint");
+    }
+
+    @Test void nodeRoleAceitaArquivosCompartilhadosSemInterferencia() throws Exception {
+        escrever("credentials", "[ci]\naws_access_key_id = X\naws_secret_access_key = Y\n");
+        escrever("config", "[default]\nregion = us-east-1\noutput = json\n[profile ci]\nendpoint_url = http://x\n");
+        assertThatCode(this::validarNodeRoleComHome).doesNotThrowAnyException();
+    }
+
+    @Test void nodeRoleFalhaFechadoQuandoArquivoCompartilhadoNaoELegivel() throws Exception {
+        Files.createDirectories(dir.resolve(".aws/credentials")); // diretorio no lugar do arquivo
+        assertThatThrownBy(this::validarNodeRoleComHome).hasMessageContaining(".aws/credentials");
+    }
+
+    // E4: IMDS desabilitado ou redirecionado
+    @ParameterizedTest @ValueSource(strings = {"true", "TRUE", " true "})
+    void nodeRoleRejeitaImdsDesabilitadoPorPropriedadeJvm(String valor) {
+        assertThatThrownBy(() -> validarNodeRole(Map.of(), Map.of("aws.disableEc2Metadata", valor)))
+                .hasMessageContaining("aws.disableEc2Metadata");
+        assertThatCode(() -> validarNodeRole(Map.of(), Map.of("aws.disableEc2Metadata", "false")))
+                .doesNotThrowAnyException();
+    }
+
+    @Test void irsaNaoExigeImdsNemPerfilCompartilhado() throws Exception {
+        String t = token("x");
+        escrever("credentials", "[default]\naws_access_key_id = X\n");
+        assertThatCode(() -> ValidadorConfiguracaoAws.validar(props(Modo.IRSA, "", "", false), ROLE, t,
+                AmbienteAws.de(Map.of("AWS_EC2_METADATA_DISABLED", "true"), Map.of(), dir)))
                 .doesNotThrowAnyException();
     }
 }
