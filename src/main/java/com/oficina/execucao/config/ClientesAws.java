@@ -20,7 +20,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 
-/** Owns every AWS client: IRSA web identity in the cluster, static test credentials against LocalStack. */
+/** Owns every AWS client: IRSA web identity or node role (default chain) in the cluster, static test credentials against LocalStack. */
 public final class ClientesAws implements AutoCloseable {
     private final List<AutoCloseable> recursos;
     private final DynamoDbClient dynamo;
@@ -34,12 +34,12 @@ public final class ClientesAws implements AutoCloseable {
         this.sqsRecepcao = sqsRecepcao;
     }
 
-    public static ClientesAws criar(ExecucaoProperties p, String roleArn, String tokenFile) {
+    public static ClientesAws criar(ExecucaoProperties p, String roleArn, String tokenFile, AmbienteAws ambiente) {
+        ValidadorConfiguracaoAws.validar(p, roleArn, tokenFile, ambiente);
         List<AutoCloseable> recursos = new ArrayList<>();
         SdkHttpClient http = UrlConnectionHttpClient.builder().connectionTimeout(Duration.ofSeconds(1))
                 .socketTimeout(Duration.ofSeconds(15)).build();
         recursos.add(http);
-        ValidadorConfiguracaoAws.validar(p, roleArn, tokenFile);
         String dynamoEndpoint = p.dynamodb().endpoint();
         String sqsEndpoint = p.mensageria().endpoint();
         AwsCredentialsProvider irsa = null;
@@ -54,6 +54,11 @@ public final class ClientesAws implements AutoCloseable {
             recursos.add(provider);
             recursos.add(sts);
             irsa = provider;
+        } else if (p.modo() == ExecucaoProperties.Modo.NODE_ROLE) {
+            // Instance profile via the default chain; the chain is closed with the clients.
+            DefaultCredentialsProvider chain = DefaultCredentialsProvider.builder().build();
+            recursos.add(chain);
+            irsa = chain;
         }
         DynamoDbClientBuilder dynamoBuilder = DynamoDbClient.builder().region(Region.of(p.dynamodb().region()))
                 .httpClient(http).credentialsProvider(credenciais(dynamoEndpoint, irsa))
