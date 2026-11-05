@@ -1,0 +1,16 @@
+# Overlay AWS Academy (Learner Lab) da execution. Offline: `kubectl kustomize k8s/overlays/aws`.
+# Sem LocalStack; EXECUCAO_AWS_MODO=NODE_ROLE (Learner Lab sem OIDC/IRSA): credencial so pela role do no via IMDSv2 (default chain); imagem GHCR por digest do manifesto de release
+# (core: infra/aws-academy/release-manifest.json). URLs das filas SQS vem dos outputs do Terraform no apply.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../local
+patches:
+  - target:
+      kind: ConfigMap
+      name: oficina-execution-config
+    path: configmap-aws.json
+images:
+  - name: oficina-execution
+    newName: ghcr.io/rafaelxvr/oficina-execution-service
+    digest: sha256:657f46e906732e4c5c3ebd7203bc53a4b61209c364cfe18e3fab730f73f32762
