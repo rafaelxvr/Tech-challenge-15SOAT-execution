@@ -1,5 +1,5 @@
 [
-  { "op": "replace", "path": "/data/EXECUCAO_AWS_MODO", "value": "IRSA" },
+  { "op": "replace", "path": "/data/EXECUCAO_AWS_MODO", "value": "NODE_ROLE" },
   { "op": "remove", "path": "/data/EXECUCAO_DYNAMODB_ENDPOINT" },
   { "op": "remove", "path": "/data/EXECUCAO_SQS_ENDPOINT" },
   { "op": "remove", "path": "/data/EXECUCAO_FILA_COMANDOS" },

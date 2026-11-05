@@ -12,6 +12,7 @@ out="$(kubectl kustomize .)" || fail "kustomize nao renderiza"
 ! grep -qE 'hostNetwork|privileged|hostPID|hostPath' <<<"$out" || fail "pod privilegiado"
 grep -q 'automountServiceAccountToken: false' <<<"$out" || fail "automountServiceAccountToken deve ser false"
 ! grep -qiE 'localstack|:4566|AWS_ACCESS_KEY_ID|AWS_SECRET_ACCESS_KEY|AWS_SESSION_TOKEN' <<<"$out" || fail "endpoint/credencial local no overlay aws"
+grep -q "EXECUCAO_AWS_MODO: NODE_ROLE" <<<"$out" || fail "EXECUCAO_AWS_MODO deve ser NODE_ROLE (Learner Lab sem IRSA)"
 grep -qE 'image: ghcr\.io/[^@ ]+@sha256:[0-9a-f]{64}' <<<"$out" || fail "imagem deve ser GHCR pinada por digest"
 if [ "${1:-}" = "--release" ] && grep -qE 'sha256:0{64}' <<<"$out"; then
   fail "digest placeholder"

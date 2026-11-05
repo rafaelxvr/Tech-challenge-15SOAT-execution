@@ -1,5 +1,5 @@
 # Overlay AWS Academy (Learner Lab) da execution. Offline: `kubectl kustomize k8s/overlays/aws`.
-# Sem LocalStack; credencial AWS so pela role do no (default chain); imagem GHCR por digest do manifesto de release
+# Sem LocalStack; EXECUCAO_AWS_MODO=NODE_ROLE (Learner Lab sem OIDC/IRSA): credencial so pela role do no via IMDSv2 (default chain); imagem GHCR por digest do manifesto de release
 # (core: infra/aws-academy/release-manifest.json). URLs das filas SQS vem dos outputs do Terraform no apply.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
