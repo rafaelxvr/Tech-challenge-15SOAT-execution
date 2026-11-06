@@ -38,8 +38,9 @@ public class ProcessadorComandos {
                 case TiposMensagem.CANCELAR_EXECUCAO -> cancelarExecucao.executar(comando);
                 default -> throw new MensagemInvalidaException("Comando desconhecido");
             };
-            MDC.put("event_name", resultado == ResultadoGravacao.DUPLICADA ? "comando_duplicado" : "comando_processado");
-            LOG.info("");
+            boolean duplicado = resultado == ResultadoGravacao.DUPLICADA;
+            MDC.put("event_name", duplicado ? "comando_duplicado" : "comando_processado");
+            LOG.info(duplicado ? "Comando duplicado ignorado" : "Comando processado");
         } finally {
             MDC.remove("event_name");
             MDC.remove("correlation_id");
