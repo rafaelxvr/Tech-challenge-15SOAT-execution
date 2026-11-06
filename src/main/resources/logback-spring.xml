@@ -80,9 +80,9 @@
                 <!-- Quantifiers are bounded on purpose: unbounded classes make masking quadratic on long messages. -->
                 <!-- Bearer/Basic/Digest credentials and JWT -->
                 <value>(?i)(?:bearer|basic|digest)\s{1,4}[A-Za-z0-9._~+/=-]{1,2048}</value>
-                <value>eyJ[A-Za-z0-9_-]{1,2048}\.[A-Za-z0-9_-]{1,2048}\.[A-Za-z0-9_-]{0,2048}</value>
+                <value>(?&lt;![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]{1,2048}\.[A-Za-z0-9_-]{1,2048}\.[A-Za-z0-9_-]{0,2048}</value>
                 <!-- sensitive key=value, key: value and embedded JSON "key":"value" pairs, including DB_PASSWORD-style prefixes -->
-                <value>(?i)(?&lt;![A-Za-z0-9])[A-Za-z0-9_-]{0,40}(?:authorization|cookie|password|senha|secret|segredo|token|api[_-]?key|secret[_-]?key|private[_-]?key|jwt|checkout[_-]?url|cpf|email|phone|telefone)[A-Za-z0-9_-]{0,40}["']?\s{0,3}[=:]\s{0,3}["']?[^\s"',;\x26]{1,512}</value>
+                <value>(?i)(?&lt;![A-Za-z0-9])[A-Za-z0-9_-]{0,40}(?:authorization|cookie|password|senha|secret|segredo|token|api[_-]?key|secret[_-]?key|private[_-]?key|jwt|checkout[_-]?url|cpf|email|phone|telefone)[A-Za-z0-9_-]{0,40}["']?\s{0,3}[=:]\s{0,3}(?:"[^"]{0,512}"?|'[^']{0,512}'?|[^\s"',;\x26]{1,512})</value>
                 <!-- Mercado Pago token and AWS access key id -->
                 <value>(?:APP_USR|TEST)-[A-Za-z0-9-]{10,256}</value>
                 <value>(?:AKIA|ASIA)[0-9A-Z]{16}</value>

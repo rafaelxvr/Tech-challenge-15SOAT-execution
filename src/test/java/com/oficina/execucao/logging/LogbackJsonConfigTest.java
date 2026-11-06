@@ -137,6 +137,29 @@ class LogbackJsonConfigTest {
     }
 
     @Test
+    void mascaraValorEntreAspasComEspacosSemDeixarCauda() throws Exception {
+        String texto = "falha password=\"SENTINELA_CAUDA1 SENTINELA_CAUDA2\" senha='SENTINELA_CAUDA3 SENTINELA_CAUDA4' fim"
+                + " {\"password\":\"SENTINELA_CAUDA5 SENTINELA_CAUDA6\"} senha=\"SENTINELA_CAUDA7 sem fechar";
+
+        String mensagem = emitir(texto).get("message").asText();
+
+        assertThat(mensagem).doesNotContain("SENTINELA_", "CAUDA");
+        assertThat(mensagem).contains("[REDACTED]").startsWith("falha ");
+    }
+
+    @Test
+    void jwtResisteARepeticaoHostilDeEyJ() {
+        String hostil = "eyJ".repeat(50_000) + "." + "eyJ".repeat(50_000);
+        assertThat(org.junit.jupiter.api.Assertions.assertTimeoutPreemptively(java.time.Duration.ofSeconds(10),
+                () -> emitir(hostil).get("message").asText())).isNotBlank();
+    }
+
+    @Test
+    void naoMascaraEyJColadoEmPalavra() throws Exception {
+        assertThat(emitir("ideyJabc.def.ghi").get("message").asText()).isEqualTo("ideyJabc.def.ghi");
+    }
+
+    @Test
     void mensagemLongaNaoTravaOMascaramento() {
         String longa = "a".repeat(200_000) + "@" + "b".repeat(50_000) + " " + "eyJ" + "x".repeat(100_000);
         assertThat(org.junit.jupiter.api.Assertions.assertTimeoutPreemptively(java.time.Duration.ofSeconds(10),
