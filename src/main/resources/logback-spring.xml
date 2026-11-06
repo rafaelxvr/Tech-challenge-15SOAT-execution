@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <!-- JSON logs with the real formatted message. Sensitive structured fields are masked by path and
+         free-text values by regex before the event is written. No stack traces: application code logs
+         stable messages and carries operational context only through the allow-listed MDC keys. -->
+    <appender name="JSON_CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder class="net.logstash.logback.encoder.LoggingEventCompositeJsonEncoder">
+            <jsonGeneratorDecorator class="net.logstash.logback.mask.MaskingJsonGeneratorDecorator">
+                <defaultMask>[REDACTED]</defaultMask>
+                <path>ACCESS_TOKEN</path>
+                <path>APIKEY</path>
+                <path>API_KEY</path>
+                <path>AUTHORIZATION</path>
+                <path>Access_token</path>
+                <path>Api_key</path>
+                <path>Apikey</path>
+                <path>Authorization</path>
+                <path>CHECKOUTURL</path>
+                <path>CHECKOUT_URL</path>
+                <path>CLIENTSECRET</path>
+                <path>CLIENT_SECRET</path>
+                <path>COOKIE</path>
+                <path>CPF</path>
+                <path>Checkout_url</path>
+                <path>Checkouturl</path>
+                <path>Client_secret</path>
+                <path>Clientsecret</path>
+                <path>Cookie</path>
+                <path>Cpf</path>
+                <path>EMAIL</path>
+                <path>Email</path>
+                <path>ID_TOKEN</path>
+                <path>Id_token</path>
+                <path>PASSWORD</path>
+                <path>PHONE</path>
+                <path>Password</path>
+                <path>Phone</path>
+                <path>REFRESH_TOKEN</path>
+                <path>Refresh_token</path>
+                <path>SECRET</path>
+                <path>SEGREDO</path>
+                <path>SENHA</path>
+                <path>SET-COOKIE</path>
+                <path>Secret</path>
+                <path>Segredo</path>
+                <path>Senha</path>
+                <path>Set-cookie</path>
+                <path>TELEFONE</path>
+                <path>TOKEN</path>
+                <path>Telefone</path>
+                <path>Token</path>
+                <path>access_token</path>
+                <path>apiKey</path>
+                <path>api_key</path>
+                <path>authorization</path>
+                <path>checkoutUrl</path>
+                <path>checkout_url</path>
+                <path>clientSecret</path>
+                <path>client_secret</path>
+                <path>cookie</path>
+                <path>cpf</path>
+                <path>email</path>
+                <path>id_token</path>
+                <path>password</path>
+                <path>phone</path>
+                <path>refresh_token</path>
+                <path>secret</path>
+                <path>segredo</path>
+                <path>senha</path>
+                <path>set-cookie</path>
+                <path>telefone</path>
+                <path>token</path>
+                <!-- Bearer and JWT -->
+                <value>(?i)bearer\s+[A-Za-z0-9._~+/=-]+</value>
+                <value>eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*</value>
+                <!-- sensitive key=value or key: value pairs -->
+                <value>(?i)\b(?:authorization|cookie|password|senha|secret|segredo|(?:access|refresh|id)[_-]?token|token|api[_-]?key|client[_-]?secret|checkout[_-]?url|cpf|email|phone|telefone)\s*[=:]\s*\S+</value>
+                <!-- Mercado Pago token -->
+                <value>(?:APP_USR|TEST)-[A-Za-z0-9-]{10,}</value>
+                <!-- e-mail, CPF, phone -->
+                <value>[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}</value>
+                <value>(?&lt;![\w-])\d{3}\.?\d{3}\.?\d{3}-?\d{2}(?![\w-])</value>
+                <value>(?&lt;![\w-])(?:\+?55\s?)?(?:\(\d{2}\)|\d{2})\s?9?\d{4}-?\d{4}(?![\w-])</value>
+            </jsonGeneratorDecorator>
+            <providers>
+                <timestamp><timeZone>UTC</timeZone><fieldName>timestamp</fieldName></timestamp>
+                <pattern>
+                    <pattern>{"service":"execution-service","environment":"${OFICINA_ENVIRONMENT:-local}","version":"${APP_VERSION:-unknown}","level":"%level"}</pattern>
+                </pattern>
+                <message/>
+                <mdc>
+                    <includeMdcKeyName>event_name</includeMdcKeyName>
+                    <includeMdcKeyName>error_code</includeMdcKeyName>
+                    <includeMdcKeyName>correlation_id</includeMdcKeyName>
+                    <includeMdcKeyName>traceparent</includeMdcKeyName>
+                    <includeMdcKeyName>saga_id</includeMdcKeyName>
+                    <includeMdcKeyName>os_id</includeMdcKeyName>
+                </mdc>
+                <arguments/>
+            </providers>
+        </encoder>
+    </appender>
+    <root level="INFO"><appender-ref ref="JSON_CONSOLE"/></root>
+</configuration>
