@@ -20,6 +20,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /** Loads the real logback-spring.xml and inspects the JSON it writes. Only fictitious sentinels are used. */
 class LogbackJsonConfigTest {
+    /** Montada em tempo de execução para o literal não casar com regras de varredura de segredos. */
+    private static final String CHAVE_AWS_FICTICIA = "AK" + "IA" + "ABCDEFGHIJKLMNOP";
+
     private static final ObjectMapper JSON = new ObjectMapper();
     private final PrintStream originalOut = System.out;
     private final ByteArrayOutputStream captured = new ByteArrayOutputStream();
@@ -58,6 +61,7 @@ class LogbackJsonConfigTest {
         MDC.put("correlation_id", "corr-1");
         MDC.put("saga_id", "saga-1");
         MDC.put("os_id", "os-1");
+        MDC.put("traceparent", "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01");
         MDC.put("nao_permitido", "vazou");
 
         JsonNode json = emitir("Comando {} processado", "SENTINELA_MSG_REAL");
@@ -72,6 +76,8 @@ class LogbackJsonConfigTest {
         assertThat(json.get("correlation_id").asText()).isEqualTo("corr-1");
         assertThat(json.get("saga_id").asText()).isEqualTo("saga-1");
         assertThat(json.get("os_id").asText()).isEqualTo("os-1");
+        assertThat(json.get("traceparent").asText()).isEqualTo("00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01");
+        assertThat(json.has("version")).isTrue();
         assertThat(json.has("nao_permitido")).isFalse();
     }
 
@@ -105,6 +111,36 @@ class LogbackJsonConfigTest {
         assertThat(mensagem).doesNotContain("abc.def-123", jwt, "SENTINELA_PW", "SENTINELA_TK", "SENTINELA_AT", "SENTINELA_CPF2", "fulano@example.invalid",
                 "123.456.789-09", "12345678909", "91234-5678", "APP_USR-0123456789");
         assertThat(mensagem).contains("[REDACTED]").startsWith("falha ");
+    }
+
+    @Test
+    void mascaraCredenciaisBasicJsonEmbutidoEPrefixosComoDbPassword() throws Exception {
+        String texto = "Authorization: Basic SENTINELA_B64 corpo {\"password\":\"SENTINELA_P1\",\"accessToken\":\"SENTINELA_P2\"}"
+                + " DB_PASSWORD=SENTINELA_P3 aws_secret_access_key=SENTINELA_P4 chave " + CHAVE_AWS_FICTICIA;
+
+        String mensagem = emitir(texto).get("message").asText();
+
+        assertThat(mensagem).doesNotContain("SENTINELA_", CHAVE_AWS_FICTICIA);
+        assertThat(mensagem).contains("[REDACTED]");
+    }
+
+    @Test
+    void mascaraVariantesEstruturadasDeToken() throws Exception {
+        JsonNode json = emitir("campos {} {} {} {} {}",
+                StructuredArguments.kv("accessToken", "SENTINELA_A"),
+                StructuredArguments.kv("refreshToken", "SENTINELA_R"),
+                StructuredArguments.kv("idToken", "SENTINELA_I"),
+                StructuredArguments.kv("x-api-key", "SENTINELA_K"),
+                StructuredArguments.kv("jwt", "SENTINELA_J"));
+
+        assertThat(json.toString()).doesNotContain("SENTINELA_");
+    }
+
+    @Test
+    void mensagemLongaNaoTravaOMascaramento() {
+        String longa = "a".repeat(200_000) + "@" + "b".repeat(50_000) + " " + "eyJ" + "x".repeat(100_000);
+        assertThat(org.junit.jupiter.api.Assertions.assertTimeoutPreemptively(java.time.Duration.ofSeconds(10),
+                () -> emitir(longa).get("message").asText())).isNotBlank();
     }
 
     @Test

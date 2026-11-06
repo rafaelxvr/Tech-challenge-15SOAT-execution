@@ -70,15 +70,24 @@
                 <path>set-cookie</path>
                 <path>telefone</path>
                 <path>token</path>
-                <!-- Bearer and JWT -->
-                <value>(?i)bearer\s+[A-Za-z0-9._~+/=-]+</value>
-                <value>eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*</value>
-                <!-- sensitive key=value or key: value pairs -->
-                <value>(?i)\b(?:authorization|cookie|password|senha|secret|segredo|(?:access|refresh|id)[_-]?token|token|api[_-]?key|client[_-]?secret|checkout[_-]?url|cpf|email|phone|telefone)\s*[=:]\s*\S+</value>
-                <!-- Mercado Pago token -->
-                <value>(?:APP_USR|TEST)-[A-Za-z0-9-]{10,}</value>
+                <path>accessToken</path>
+                <path>refreshToken</path>
+                <path>idToken</path>
+                <path>x-api-key</path>
+                <path>jwt</path>
+                <path>secretKey</path>
+                <path>privateKey</path>
+                <!-- Quantifiers are bounded on purpose: unbounded classes make masking quadratic on long messages. -->
+                <!-- Bearer/Basic/Digest credentials and JWT -->
+                <value>(?i)(?:bearer|basic|digest)\s{1,4}[A-Za-z0-9._~+/=-]{1,2048}</value>
+                <value>eyJ[A-Za-z0-9_-]{1,2048}\.[A-Za-z0-9_-]{1,2048}\.[A-Za-z0-9_-]{0,2048}</value>
+                <!-- sensitive key=value, key: value and embedded JSON "key":"value" pairs, including DB_PASSWORD-style prefixes -->
+                <value>(?i)(?&lt;![A-Za-z0-9])[A-Za-z0-9_-]{0,40}(?:authorization|cookie|password|senha|secret|segredo|token|api[_-]?key|secret[_-]?key|private[_-]?key|jwt|checkout[_-]?url|cpf|email|phone|telefone)[A-Za-z0-9_-]{0,40}["']?\s{0,3}[=:]\s{0,3}["']?[^\s"',;\x26]{1,512}</value>
+                <!-- Mercado Pago token and AWS access key id -->
+                <value>(?:APP_USR|TEST)-[A-Za-z0-9-]{10,256}</value>
+                <value>(?:AKIA|ASIA)[0-9A-Z]{16}</value>
                 <!-- e-mail, CPF, phone -->
-                <value>[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}</value>
+                <value>[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,255}\.[A-Za-z]{2,24}</value>
                 <value>(?&lt;![\w-])\d{3}\.?\d{3}\.?\d{3}-?\d{2}(?![\w-])</value>
                 <value>(?&lt;![\w-])(?:\+?55\s?)?(?:\(\d{2}\)|\d{2})\s?9?\d{4}-?\d{4}(?![\w-])</value>
             </jsonGeneratorDecorator>
