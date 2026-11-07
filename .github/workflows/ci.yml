@@ -1,6 +1,7 @@
 name: CI
 
 on:
+  workflow_dispatch:
   push:
     branches: [main, develop]
   pull_request:
@@ -37,7 +38,16 @@ jobs:
       - name: Resumo de cobertura JaCoCo
         if: always()
         run: |
-          awk -F, 'NR>1 {m+=$8; c+=$9; bm+=$6; bc+=$7} END {if (m+c>0) printf "Cobertura de linhas: %.2f%% (minimo 80%%)\nCobertura de branches: %.2f%%\n", 100*c/(m+c), 100*bc/(bm+bc)}' target/site/jacoco/jacoco.csv | tee -a "$GITHUB_STEP_SUMMARY"
+          awk -F, 'NR>1 {m+=$8; c+=$9; bm+=$6; bc+=$7} END {if (m+c>0) printf "Cobertura de linhas: %.2f%% (%d/%d, minimo 80%%)\nCobertura de branches: %.2f%%\n", 100*c/(m+c), c, m+c, 100*bc/(bm+bc)}' target/site/jacoco/jacoco.csv | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Relatórios JaCoCo (SHA ${{ github.sha }})
+        if: always()
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        with:
+          name: jacoco-${{ github.sha }}
+          path: target/site/jacoco
+          if-no-files-found: error
+          retention-days: 14
 
   sast-codeql:
     name: SAST (CodeQL Java)
@@ -57,7 +67,7 @@ jobs:
           cache: maven
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4
+        uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         with:
           languages: java-kotlin
           build-mode: manual
@@ -67,7 +77,7 @@ jobs:
         run: bash ./mvnw -B -DskipTests -Djacoco.skip=true package
 
       - name: Analyze
-        uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4
+        uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         with:
           category: /language:java-kotlin
 
@@ -116,3 +126,164 @@ jobs:
 
       - name: Contrato offline dos manifests Kind e do Dockerfile
         run: bash scripts/tests/kind-manifests-contract.test.sh
+
+  # Publicação da imagem no GHCR (UNR-709). Só em push para develop/main; PR nunca publica.
+  # GITHUB_TOKEN com packages:write somente neste job (sem PAT nem segredo novo).
+  # O buildx dedicado faz o digest do build-push-action ser o do manifesto publicado.
+  # A imagem não recebe segredo: a licença do New Relic e as credenciais entram só em runtime.
+  docker-image:
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main')
+    name: Publicar imagem no GHCR
+    needs: [build-and-test, sca-trivy, secrets-gitleaks]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    env:
+      REGISTRY: ghcr.io
+      IMAGE_NAME: oficina-execution-service
+      TRIVY_IMAGE: aquasec/trivy@sha256:ab70a02200597efa04748f210f793936eb647cbcdb0ea69cc30b226d6f5a22c7 # 0.58.1
+    outputs:
+      image_base: ${{ steps.names.outputs.image_base }}
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      # GHCR exige owner em minúsculas.
+      - name: Normalizar nome da imagem
+        id: names
+        env:
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          OWNER_LC=$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')
+          echo "image_base=${REGISTRY}/${OWNER_LC}/${IMAGE_NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Configurar Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+
+      - name: Login GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Metadados da imagem
+        id: meta
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
+        with:
+          images: ${{ steps.names.outputs.image_base }}
+          tags: |
+            type=sha,prefix=,format=long
+
+      # Scan da imagem ANTES do push (UNR-833): o Trivy fs sobre pom.xml não enxerga versões
+      # vindas do BOM do Spring Boot; só a imagem montada revela o classpath efetivo.
+      - name: Build da imagem para scan (sem push)
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: .
+          push: false
+          load: true
+          tags: execution-scan:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Scan da imagem (Trivy image; falha em HIGH/CRITICAL com correção)
+        env:
+          IMAGE_REF: execution-scan:${{ github.sha }}
+        run: |
+          set +x
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "$PWD:/src:ro"             "$TRIVY_IMAGE" image --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed             --ignorefile /src/.trivyignore.yaml --exit-code 1 "$IMAGE_REF"
+
+      - name: Build e push
+        id: build
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+
+      - name: Resumo da imagem publicada
+        env:
+          IMAGE_BASE: ${{ steps.names.outputs.image_base }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          {
+            echo "### Imagem publicada no GHCR"
+            echo "- Imagem: \`${IMAGE_BASE}\`"
+            echo "- Tag (SHA do commit): \`${GITHUB_SHA}\`"
+            echo "- Digest: \`${DIGEST}\`"
+            echo "- Referência imutável: \`${IMAGE_BASE}@${DIGEST}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # Quality gate do SonarCloud (UNR-618). Ativo com a variável de repositório SONAR_ENABLED=true
+  # ou por execução manual (workflow_dispatch). Quando ativo, não há skip silencioso: sem
+  # SONAR_TOKEN o job FALHA com mensagem explícita.
+  # Organização e chave do projeto ficam no pom.xml (não secretas); só o token é secret.
+  # PR vindo de fork não recebe secrets e fica fora do gate.
+  sonar:
+    name: SonarCloud e quality gate
+    if: ${{ (vars.SONAR_ENABLED == 'true' || github.event_name == 'workflow_dispatch') && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      SONAR_MAVEN_PLUGIN: org.sonarsource.scanner.maven:sonar-maven-plugin:4.0.0.4121
+    steps:
+      - name: Checkout (SHA ${{ github.sha }})
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # O scanner do Sonar 4.x exige JVM 21+; o código continua compilando com release 17 (java.version).
+      - name: Set up Java 21
+        uses: actions/setup-java@3a4f6e1af504cf6a31855fa899c6aa5355ba6c12 # v4.7.0
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Exigir configuração do SonarCloud (falha, nunca ignora)
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          set +x
+          faltando=0
+          if [ -z "$SONAR_TOKEN" ]; then
+            echo "::error::Secret SONAR_TOKEN ausente. Cadastre-o em Settings > Secrets and variables > Actions ou desative o gate com SONAR_ENABLED=false."
+            faltando=1
+          fi
+          exit "$faltando"
+
+      # verify gera o JaCoCo XML (target/site/jacoco/jacoco.xml) lido pelo scanner.
+      # qualitygate.wait faz o job falhar se o quality gate reprovar. O token só vai por env, nunca para o log.
+      - name: Análise e espera do quality gate
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          set +x
+          bash ./mvnw -B -q verify "${SONAR_MAVEN_PLUGIN}:sonar"             -Dsonar.host.url=https://sonarcloud.io               -Dsonar.qualitygate.wait=true             -Dsonar.qualitygate.timeout=600
+
+      - name: Evidência do quality gate (SHA ${{ github.sha }})
+        if: always()
+        run: |
+          set +x
+          {
+            echo "### SonarCloud"
+            echo "- Commit analisado: \`${GITHUB_SHA}\`"
+            echo "- Execução: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            if [ -f target/sonar/report-task.txt ]; then
+              echo "- Painel: $(grep '^dashboardUrl=' target/sonar/report-task.txt | cut -d= -f2-)"
+            else
+              echo "- Painel: indisponível (a análise não chegou a publicar)"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

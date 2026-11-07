@@ -24,6 +24,10 @@ Linux/macOS:
 bash ./mvnw -B verify
 ```
 
+## Recuperação operacional (runbook D19-R)
+
+Outbox `BLOCKED`, mensagens na DLQ, LocalStack/SQS fora e reconciliação de compensação são tratados no runbook único da Fase 4, mantido no os-service: [`docs/runbooks/saga-recuperacao-d19r.md` em `develop`](https://github.com/rafaelxvr/Tech-challenge-15SOAT/blob/develop/docs/runbooks/saga-recuperacao-d19r.md) (o arquivo entra em `develop` com o merge do [PR #93 do os-service](https://github.com/rafaelxvr/Tech-challenge-15SOAT/pull/93); até lá, o conteúdo está nesse PR). Exercitado em Kind com este serviço no SHA `0669c4bfd1170e75c5726621aee51fcf329a3704`.
+
 ## Branches e segredos
 
 `main` é reservado a revisões aprovadas para entrega; `develop` é a branch de integração. O baseline ainda não foi implantado. Não versione credenciais: arquivos `.env` são ignorados e CI deve receber segredos por configuração protegida do GitHub.

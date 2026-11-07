@@ -25,7 +25,7 @@ public class ExecucaoConfiguration {
 
     @Bean(destroyMethod = "close") ClientesAws clientesAws(ExecucaoProperties propriedades,
             @Value("${AWS_ROLE_ARN:}") String roleArn, @Value("${AWS_WEB_IDENTITY_TOKEN_FILE:}") String tokenFile) {
-        return ClientesAws.criar(propriedades, roleArn, tokenFile);
+        return ClientesAws.criar(propriedades, roleArn, tokenFile, AmbienteAws.doProcesso());
     }
 
     @Bean NomesTabelas nomesTabelas(ExecucaoProperties propriedades) {

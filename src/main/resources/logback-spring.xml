@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <!-- JSON logs with the real formatted message. Sensitive structured fields are masked by path and
+         free-text values by regex before the event is written. No stack traces: application code logs
+         stable messages and carries operational context only through the allow-listed MDC keys. -->
+    <appender name="JSON_CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder class="net.logstash.logback.encoder.LoggingEventCompositeJsonEncoder">
+            <jsonGeneratorDecorator class="net.logstash.logback.mask.MaskingJsonGeneratorDecorator">
+                <defaultMask>[REDACTED]</defaultMask>
+                <path>ACCESS_TOKEN</path>
+                <path>APIKEY</path>
+                <path>API_KEY</path>
+                <path>AUTHORIZATION</path>
+                <path>Access_token</path>
+                <path>Api_key</path>
+                <path>Apikey</path>
+                <path>Authorization</path>
+                <path>CHECKOUTURL</path>
+                <path>CHECKOUT_URL</path>
+                <path>CLIENTSECRET</path>
+                <path>CLIENT_SECRET</path>
+                <path>COOKIE</path>
+                <path>CPF</path>
+                <path>Checkout_url</path>
+                <path>Checkouturl</path>
+                <path>Client_secret</path>
+                <path>Clientsecret</path>
+                <path>Cookie</path>
+                <path>Cpf</path>
+                <path>EMAIL</path>
+                <path>Email</path>
+                <path>ID_TOKEN</path>
+                <path>Id_token</path>
+                <path>PASSWORD</path>
+                <path>PHONE</path>
+                <path>Password</path>
+                <path>Phone</path>
+                <path>REFRESH_TOKEN</path>
+                <path>Refresh_token</path>
+                <path>SECRET</path>
+                <path>SEGREDO</path>
+                <path>SENHA</path>
+                <path>SET-COOKIE</path>
+                <path>Secret</path>
+                <path>Segredo</path>
+                <path>Senha</path>
+                <path>Set-cookie</path>
+                <path>TELEFONE</path>
+                <path>TOKEN</path>
+                <path>Telefone</path>
+                <path>Token</path>
+                <path>access_token</path>
+                <path>apiKey</path>
+                <path>api_key</path>
+                <path>authorization</path>
+                <path>checkoutUrl</path>
+                <path>checkout_url</path>
+                <path>clientSecret</path>
+                <path>client_secret</path>
+                <path>cookie</path>
+                <path>cpf</path>
+                <path>email</path>
+                <path>id_token</path>
+                <path>password</path>
+                <path>phone</path>
+                <path>refresh_token</path>
+                <path>secret</path>
+                <path>segredo</path>
+                <path>senha</path>
+                <path>set-cookie</path>
+                <path>telefone</path>
+                <path>token</path>
+                <path>accessToken</path>
+                <path>refreshToken</path>
+                <path>idToken</path>
+                <path>x-api-key</path>
+                <path>jwt</path>
+                <path>secretKey</path>
+                <path>privateKey</path>
+                <!-- Quantifiers are bounded on purpose: unbounded classes make masking quadratic on long messages. -->
+                <!-- Bearer/Basic/Digest credentials and JWT -->
+                <value>(?i)(?:bearer|basic|digest)\s{1,4}[A-Za-z0-9._~+/=-]{1,2048}</value>
+                <value>(?&lt;![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]{1,2048}\.[A-Za-z0-9_-]{1,2048}\.[A-Za-z0-9_-]{0,2048}</value>
+                <!-- sensitive key=value, key: value and embedded JSON "key":"value" pairs, including DB_PASSWORD-style prefixes -->
+                <value>(?i)(?&lt;![A-Za-z0-9])[A-Za-z0-9_-]{0,40}(?:authorization|cookie|password|senha|secret|segredo|token|api[_-]?key|secret[_-]?key|private[_-]?key|jwt|checkout[_-]?url|cpf|email|phone|telefone)[A-Za-z0-9_-]{0,40}["']?\s{0,3}[=:]\s{0,3}(?:"[^"]{0,512}"?|'[^']{0,512}'?|[^\s"',;\x26]{1,512})</value>
+                <!-- Mercado Pago token and AWS access key id -->
+                <value>(?:APP_USR|TEST)-[A-Za-z0-9-]{10,256}</value>
+                <value>(?:AKIA|ASIA)[0-9A-Z]{16}</value>
+                <!-- e-mail, CPF, phone -->
+                <value>[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,255}\.[A-Za-z]{2,24}</value>
+                <value>(?&lt;![\w-])\d{3}\.?\d{3}\.?\d{3}-?\d{2}(?![\w-])</value>
+                <value>(?&lt;![\w-])(?:\+?55\s?)?(?:\(\d{2}\)|\d{2})\s?9?\d{4}-?\d{4}(?![\w-])</value>
+            </jsonGeneratorDecorator>
+            <providers>
+                <timestamp><timeZone>UTC</timeZone><fieldName>timestamp</fieldName></timestamp>
+                <pattern>
+                    <pattern>{"service":"execution-service","environment":"${OFICINA_ENVIRONMENT:-local}","version":"${APP_VERSION:-unknown}","level":"%level"}</pattern>
+                </pattern>
+                <message/>
+                <mdc>
+                    <includeMdcKeyName>event_name</includeMdcKeyName>
+                    <includeMdcKeyName>error_code</includeMdcKeyName>
+                    <includeMdcKeyName>correlation_id</includeMdcKeyName>
+                    <includeMdcKeyName>traceparent</includeMdcKeyName>
+                    <includeMdcKeyName>saga_id</includeMdcKeyName>
+                    <includeMdcKeyName>os_id</includeMdcKeyName>
+                </mdc>
+                <arguments/>
+            </providers>
+        </encoder>
+    </appender>
+    <root level="INFO"><appender-ref ref="JSON_CONSOLE"/></root>
+</configuration>
