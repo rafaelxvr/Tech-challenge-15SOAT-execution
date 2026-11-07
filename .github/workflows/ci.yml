@@ -127,6 +127,9 @@ jobs:
       - name: Contrato offline dos manifests Kind e do Dockerfile
         run: bash scripts/tests/kind-manifests-contract.test.sh
 
+      - name: Regressões do Kind do CI (guard anti-AWS, port-forward residual, sanitização fail-closed)
+        run: bash scripts/tests/kind-ci-guards.test.sh
+
   # Kind efêmero independente (UNR-960): sobe só o execution + LocalStack com credenciais fictícias, valida
   # readiness/liveness da imagem do SHA exato e prova o teardown. Sem AWS: permissions só contents:read
   # (sem id-token), sem AWS_PROFILE e sem segredo; o segredo HMAC do JWT é efêmero e gerado no script.
@@ -178,12 +181,16 @@ jobs:
           done
           echo "== logs execution ==" >>"$out"
           kubectl --context "$ctx" -n oficina-execution logs deploy/oficina-execution --tail=200 >>"$out" 2>&1 || true
-          # Nunca publicar valores de credencial que eventualmente apareçam nos logs.
-          sed -i -E 's/([Pp]assword|[Ss]ecret|[Tt]oken|[Aa]uthorization|[Aa]pi[_-]?[Kk]ey)(["\x27:=[:space:]]+)[^[:space:]]+/\1\2***/g' "$out"
+          # Mascaramento (Authorization/Bearer/JWT/segredos) e verificação fail-closed no passo "Sanitizar artefatos".
 
       - name: Down e prova de cleanup
         if: always()
         run: bash scripts/kind-ci.sh down
+
+      # Fail-closed: se sobrar Authorization/Bearer/JWT, apaga TODOS os arquivos de evidência (nada é publicado) e falha.
+      - name: Sanitizar artefatos (fail-closed)
+        if: always()
+        run: bash scripts/kind-ci-sanitize.sh "$EVIDENCE_DIR"
 
       - name: Resumo e artefatos sanitizados
         if: always()

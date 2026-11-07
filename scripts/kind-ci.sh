@@ -14,16 +14,9 @@ tag="${IMAGE_TAG:?IMAGE_TAG obrigatório (SHA do commit, nunca latest)}"
 [ "$tag" != "latest" ] || { echo "tag latest proibida"; exit 1; }
 evidence="${EVIDENCE_DIR:-$root/target/kind-ci-evidence}"
 ns=oficina-execution
+# shellcheck source=scripts/lib/kind-ci-guards.sh
+source "$root/scripts/lib/kind-ci-guards.sh"
 local_port="${KIND_CI_LOCAL_PORT:-18080}"
-
-guard_no_aws() {
-  # O perfil local/CI nunca alcança a AWS: sem perfil, sem credencial real, sem arquivos de credencial.
-  for v in AWS_PROFILE AWS_SESSION_TOKEN AWS_WEB_IDENTITY_TOKEN_FILE AWS_ROLE_ARN; do
-    [ -z "${!v:-}" ] || { echo "::error::$v definido: o Kind do CI não pode receber credencial AWS"; exit 1; }
-  done
-  [ ! -e "$HOME/.aws/credentials" ] || { echo "::error::~/.aws/credentials presente"; exit 1; }
-  echo "guard-aws: ok (sem AWS_PROFILE, sem token, sem credencial AWS)"
-}
 
 up() {
   guard_no_aws
@@ -83,7 +76,7 @@ down() {
   kind get clusters 2>/dev/null | grep -qx "$cluster" && problems+=("cluster ainda existe")
   [ -z "$(docker ps -a --filter "name=^${cluster}-" --format '{{.Names}}')" ] || problems+=("contêineres do cluster restantes")
   [ -z "$(docker images -q "oficina-execution:${tag}")" ] || problems+=("imagem local restante")
-  if pgrep -f "port-forward.*${context}" >/dev/null 2>&1; then problems+=("port-forward residual"); fi
+  [ -z "$(residual_port_forwards "$context")" ] || problems+=("port-forward residual")
   if [ "${#problems[@]}" -gt 0 ]; then echo "cleanup incompleto: ${problems[*]}"; exit 1; fi
   echo "cleanup verificado: cluster=0 contêineres=0 imagem=0 port-forwards=0" | tee "$evidence/teardown.txt"
 }
