@@ -127,6 +127,97 @@ jobs:
       - name: Contrato offline dos manifests Kind e do Dockerfile
         run: bash scripts/tests/kind-manifests-contract.test.sh
 
+      - name: Regressões do Kind do CI (guard anti-AWS, port-forward residual, sanitização fail-closed)
+        run: bash scripts/tests/kind-ci-guards.test.sh
+
+  # Kind efêmero independente (UNR-960): sobe só o execution + LocalStack com credenciais fictícias, valida
+  # readiness/liveness da imagem do SHA exato e prova o teardown. Sem AWS: permissions só contents:read
+  # (sem id-token), sem AWS_PROFILE e sem segredo; o segredo HMAC do JWT é efêmero e gerado no script.
+  kind-e2e:
+    name: Kind efêmero (execution + LocalStack)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      KIND_VERSION: v0.24.0
+      EVIDENCE_DIR: ${{ github.workspace }}/kind-ci-evidence
+      IMAGE_TAG: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      # No pull_request o checkout padrão é o merge commit; o head exato é o SHA que a evidência registra.
+      - name: Checkout (SHA ${{ github.event.pull_request.head.sha || github.sha }})
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Instalar kind (binário com checksum do release)
+        run: |
+          set -euo pipefail
+          base="https://github.com/kubernetes-sigs/kind/releases/download/${KIND_VERSION}"
+          curl -fsSLo kind "${base}/kind-linux-amd64"
+          curl -fsSLo kind.sha256sum "${base}/kind-linux-amd64.sha256sum"
+          echo "$(cut -d' ' -f1 kind.sha256sum)  kind" | sha256sum -c -
+          sudo install -m 0755 kind /usr/local/bin/kind
+          rm -f kind kind.sha256sum
+          kind version
+
+      - name: Up (cluster, LocalStack, filas/tabelas, imagem do SHA)
+        run: bash scripts/kind-ci.sh up
+
+      - name: Verify (imagem do SHA, readiness e liveness)
+        run: bash scripts/kind-ci.sh verify
+
+      - name: Diagnóstico do cluster (só em falha, sem segredos)
+        if: failure() || cancelled()
+        run: |
+          set +x
+          mkdir -p "$EVIDENCE_DIR"
+          out="$EVIDENCE_DIR/diagnostico.txt"
+          ctx="kind-oficina-exec-ci"
+          for ns in infra oficina-execution; do
+            echo "== pods $ns ==" >>"$out"
+            kubectl --context "$ctx" -n "$ns" get pods -o wide >>"$out" 2>&1 || true
+          done
+          echo "== logs execution ==" >>"$out"
+          kubectl --context "$ctx" -n oficina-execution logs deploy/oficina-execution --tail=200 >>"$out" 2>&1 || true
+          # Mascaramento (Authorization/Bearer/JWT/segredos) e verificação fail-closed no passo "Sanitizar artefatos".
+
+      - name: Down e prova de cleanup
+        if: always()
+        run: bash scripts/kind-ci.sh down
+
+      # Fail-closed: se sobrar Authorization/Bearer/JWT, apaga TODOS os arquivos de evidência (nada é publicado) e falha.
+      - name: Sanitizar artefatos (fail-closed)
+        if: always()
+        run: bash scripts/kind-ci-sanitize.sh "$EVIDENCE_DIR"
+
+      - name: Resumo e artefatos sanitizados
+        if: always()
+        run: |
+          {
+            echo "### Kind efêmero do execution"
+            echo "- SHA: \`${IMAGE_TAG}\`"
+            echo "- Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            for f in health-liveness.json health-readiness.json teardown.txt; do
+              [ -f "$EVIDENCE_DIR/$f" ] && echo "- $f: $(tr -d '[:space:]' <"$EVIDENCE_DIR/$f" | cut -c1-200)"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publicar evidência (SHA ${{ github.event.pull_request.head.sha || github.sha }})
+        if: always()
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        with:
+          name: kind-ci-evidence-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            ${{ env.EVIDENCE_DIR }}/evidence.md
+            ${{ env.EVIDENCE_DIR }}/health-liveness.json
+            ${{ env.EVIDENCE_DIR }}/health-readiness.json
+            ${{ env.EVIDENCE_DIR }}/teardown.txt
+            ${{ env.EVIDENCE_DIR }}/diagnostico.txt
+          if-no-files-found: warn
+          retention-days: 14
+
   # Publicação da imagem no GHCR (UNR-709). Só em push para develop/main; PR nunca publica.
   # GITHUB_TOKEN com packages:write somente neste job (sem PAT nem segredo novo).
   # O buildx dedicado faz o digest do build-push-action ser o do manifesto publicado.
