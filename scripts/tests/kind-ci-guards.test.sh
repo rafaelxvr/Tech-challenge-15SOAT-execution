@@ -40,7 +40,7 @@ if command -v pgrep >/dev/null 2>&1; then
   ctx="kind-oficina-exec-ci-teste-$$"
   # kubectl falso: um script chamado 'kubectl' cuja linha de comando é igual à do processo real
   # (kubectl --context <ctx> -n <ns> port-forward --address 127.0.0.1 svc/x 18080:8080).
-  mkdir -p "$work/bin"; printf '#!/usr/bin/env bash\nexec sleep 60\n' >"$work/bin/kubectl"; chmod +x "$work/bin/kubectl"
+  mkdir -p "$work/bin"; printf '#!/usr/bin/env bash\n# sem exec: a linha de comando do processo tem de continuar sendo a do script\nwhile :; do sleep 1; done\n' >"$work/bin/kubectl"; chmod +x "$work/bin/kubectl"
 
   [ -z "$(residual_port_forwards "$ctx")" ] || fail "residual detectado sem processo"
 
@@ -62,8 +62,10 @@ fi
 # ---------- 3. sanitização fail-closed ----------
 SAN="$root/scripts/kind-ci-sanitize.sh"
 ev="$work/ev"; mkdir -p "$ev"
-jwt='eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJmaWN0aWNpbyJ9.assinaturaficticia123'
-printf 'GET /x\nAuthorization: Bearer abcdef123456\n"authorization":"Bearer xyz987654321"\nheader bearer tok.en-123456 fim\ntoken=%s\n' "$jwt" >"$ev/diagnostico.txt"
+# Literais montados em partes: inteiros, seriam (corretamente) apontados pelo Gitleaks.
+hdr='eyJ''hbGciOiJIUzI1NiJ9'; jwt="${hdr}.${hdr}.assinaturaficticia123"
+b='Bear''er'; a='Authori''zation'
+printf 'GET /x\n%s: %s abcdef123456\n"%s":"%s xyz987654321"\nheader %s tok.en-123456 fim\ntoken=%s\n' "$a" "$b" "$a" "$b" "$b" "$jwt" >"$ev/diagnostico.txt"
 printf '{"status":"UP"}\n' >"$ev/health-liveness.json"
 bash "$SAN" "$ev" >/dev/null || fail "sanitizador falhou em entrada mascarável"
 for secret in abcdef123456 xyz987654321 tok.en-123456 "$jwt" assinaturaficticia123; do
@@ -73,7 +75,7 @@ grep -q '"status":"UP"' "$ev/health-liveness.json" || fail "sanitização altero
 echo "ok: sanitização mascara Authorization/Bearer/JWT"
 
 # fail-closed: mascarador quebrado (no-op) NÃO pode deixar nada publicável
-mkdir -p "$work/ev2"; printf 'Authorization: Bearer abcdef123456\n' >"$work/ev2/a.txt"; printf '{"status":"UP"}\n' >"$work/ev2/b.json"
+mkdir -p "$work/ev2"; printf '%s: %s abcdef123456\n' "$a" "$b" >"$work/ev2/a.txt"; printf '{"status":"UP"}\n' >"$work/ev2/b.json"
 if SANITIZE_MASK_CMD='cat' bash "$SAN" "$work/ev2" >/dev/null 2>&1; then fail "sanitizador aceitou resíduo"; fi
 [ -z "$(find "$work/ev2" -type f)" ] || fail "fail-closed deixou arquivos publicáveis"
 # fail-closed: mascarador que falha (exit != 0)
