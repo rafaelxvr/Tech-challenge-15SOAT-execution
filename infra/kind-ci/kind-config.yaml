@@ -1,0 +1,5 @@
+# Cluster Kind efêmero do CI do execution. Sem extraPortMappings: o acesso é só por `kubectl port-forward` em 127.0.0.1.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+  - role: control-plane

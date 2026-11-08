@@ -1,0 +1,253 @@
+{
+  "openapi" : "3.1.0",
+  "info" : {
+    "title" : "OpenAPI definition",
+    "version" : "v0"
+  },
+  "servers" : [ {
+    "url" : "http://localhost/execucao",
+    "description" : "Generated server url"
+  } ],
+  "tags" : [ {
+    "name" : "Execução",
+    "description" : "Fila de diagnóstico e reparo por filial"
+  } ],
+  "paths" : {
+    "/{id}/tarefas" : {
+      "post" : {
+        "tags" : [ "Execução" ],
+        "summary" : "Registra uma tarefa realizada",
+        "operationId" : "registrarTarefa",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/NovaTarefaRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ExecucaoResposta"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/{id}/iniciar" : {
+      "post" : {
+        "tags" : [ "Execução" ],
+        "summary" : "Mecânico assume a execução (NA_FILA → EM_ANDAMENTO)",
+        "operationId" : "iniciar",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ExecucaoResposta"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/{id}/concluir" : {
+      "post" : {
+        "tags" : [ "Execução" ],
+        "summary" : "Conclui a execução e responde à saga da OS",
+        "operationId" : "concluir",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ExecucaoResposta"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/fila" : {
+      "get" : {
+        "tags" : [ "Execução" ],
+        "summary" : "Execuções ativas da filial: em andamento primeiro, depois a fila por ordem de chegada",
+        "operationId" : "fila",
+        "parameters" : [ {
+          "name" : "filialId",
+          "in" : "query",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/ExecucaoResposta"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/execucoes" : {
+      "get" : {
+        "tags" : [ "Execução" ],
+        "summary" : "Todas as execuções de uma ordem de serviço",
+        "operationId" : "porOs",
+        "parameters" : [ {
+          "name" : "osId",
+          "in" : "query",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/ExecucaoResposta"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components" : {
+    "schemas" : {
+      "NovaTarefaRequest" : {
+        "type" : "object",
+        "properties" : {
+          "descricao" : {
+            "type" : "string",
+            "maxLength" : 200,
+            "minLength" : 0
+          }
+        },
+        "required" : [ "descricao" ]
+      },
+      "ExecucaoResposta" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "osId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "numeroOs" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "filialId" : {
+            "type" : "string"
+          },
+          "tipo" : {
+            "type" : "string"
+          },
+          "status" : {
+            "type" : "string"
+          },
+          "mecanico" : {
+            "type" : "string"
+          },
+          "tarefas" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/TarefaResposta"
+            }
+          },
+          "enfileiradoEm" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "iniciadoEm" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "concluidoEm" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "motivoRecusa" : {
+            "type" : "string"
+          }
+        }
+      },
+      "TarefaResposta" : {
+        "type" : "object",
+        "properties" : {
+          "descricao" : {
+            "type" : "string"
+          },
+          "quantidade" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "registradaEm" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        }
+      }
+    }
+  }
+}

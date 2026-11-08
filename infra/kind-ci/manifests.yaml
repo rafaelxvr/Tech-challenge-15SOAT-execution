@@ -1,0 +1,53 @@
+# Dependências do execution no Kind do CI: namespaces e LocalStack (SQS FIFO + DynamoDB).
+# Credenciais fictícias ("test"); nenhuma conta ou endpoint AWS.
+apiVersion: v1
+kind: Namespace
+metadata: { name: infra }
+---
+apiVersion: v1
+kind: Namespace
+metadata: { name: oficina-execution }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: localstack
+  namespace: infra
+spec:
+  selector: { app: localstack }
+  ports:
+    - { name: edge, port: 4566, targetPort: 4566 }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: localstack
+  namespace: infra
+spec:
+  replicas: 1
+  strategy: { type: Recreate }
+  selector:
+    matchLabels: { app: localstack }
+  template:
+    metadata:
+      labels: { app: localstack }
+    spec:
+      containers:
+        - name: localstack
+          image: localstack/localstack:3.8@sha256:b279c01f4cfb8f985a482e4014cabc1e2697b9d7a6c8c8db2e40f4d9f93687c7
+          ports:
+            - { name: edge, containerPort: 4566 }
+          env:
+            - { name: SERVICES, value: "sqs,dynamodb" }
+            - { name: DEFAULT_REGION, value: us-east-1 }
+            - { name: AWS_ACCESS_KEY_ID, value: test }
+            - { name: AWS_SECRET_ACCESS_KEY, value: test }
+            - { name: DISABLE_EVENTS, value: "1" }
+            - { name: LOCALSTACK_HOST, value: "localstack.infra.svc.cluster.local:4566" }
+          readinessProbe:
+            httpGet: { path: /_localstack/health, port: 4566 }
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { memory: 1Gi }

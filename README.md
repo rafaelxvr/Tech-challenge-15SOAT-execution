@@ -7,6 +7,7 @@ Serviço Spring Boot independente para diagnóstico, reparo e cancelamento de ex
 - Java 17 e Spring Boot 3.2.5.
 - HTTP em `8080`, contexto `/execucao`.
 - Health check: `/execucao/actuator/health`.
+- Contrato HTTP versionado em `docs/openapi.json` (gerado pelo springdoc, guardado por `OpenApiTest`; regenerar com `./mvnw test -Dtest=OpenApiTest -Dopenapi.escrever=true`). Rotas protegidas por JWT de staff (ADMIN/MECANICO).
 - DynamoDB Local e SQS FIFO pelo LocalStack; nomes de tabelas e filas seguem o contrato da Fase 4.
 - Nenhuma etapa deste baseline publica imagens ou faz deploy.
 

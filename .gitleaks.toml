@@ -1,6 +1,7 @@
 # Estende as regras padrão do Gitleaks. Exceções mínimas e auditáveis (UNR-616), restritas por linha:
 # 1) checksum SHA-256 público do agente Java do New Relic (não é credencial; casa com a regra new-relic-user-api-id);
-# 2) chave fictícia usada só pelo teste de entrypoint (scripts/tests/entrypoint-observability.test.sh).
+# 2) chave fictícia usada só pelo teste de entrypoint (scripts/tests/entrypoint-observability.test.sh);
+# 3) commit c07b31e (UNR-960): JWT FICTÍCIO de teste, já removido na HEAD; histórico publicado não é reescrito.
 title = "execution-service"
 
 [extend]
@@ -8,6 +9,7 @@ useDefault = true
 
 [allowlist]
 description = "Checksum público do agente New Relic e chave fictícia do teste de entrypoint"
+commits = ["c07b31e84a3560a8e7bd1d7cc5144a3f02999678"]
 regexTarget = "line"
 regexes = [
   '''NEW_RELIC_JAVA_AGENT_SHA256=[0-9a-f]{64}''',
