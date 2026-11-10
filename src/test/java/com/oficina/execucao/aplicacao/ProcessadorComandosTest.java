@@ -77,6 +77,18 @@ class ProcessadorComandosTest extends LocalStackSupport {
         return comando;
     }
 
+    @Test void anotaSagaIdECorrelationIdSemPiiNaTransacao() {
+        var propagador = org.mockito.Mockito.mock(com.oficina.execucao.aplicacao.rastreio.PropagadorTraco.class);
+        var comTrace = new ProcessadorComandos(MAPEADOR,
+                new IniciarDiagnostico(registro, new FabricaRespostas(CLOCK), new Filiais(List.of("MATRIZ")), CLOCK),
+                null, null, propagador);
+        Envelope comando = Fixtures.comando(TiposMensagem.INICIAR_DIAGNOSTICO, UUID.randomUUID(), 1, diagnostico("MATRIZ"));
+        comTrace.processar(MAPEADOR.escrever(comando));
+        org.mockito.Mockito.verify(propagador).anotar("sagaId", comando.sagaId().toString());
+        org.mockito.Mockito.verify(propagador).anotar("correlationId", comando.correlationId());
+        org.mockito.Mockito.verifyNoMoreInteractions(propagador);
+    }
+
     @Test void diagnosticoCriaExecucaoNaFilaSemResposta() {
         UUID os = UUID.randomUUID();
         Envelope comando = enviar(TiposMensagem.INICIAR_DIAGNOSTICO, os, 1, diagnostico("MATRIZ"));

@@ -1,6 +1,9 @@
 package com.oficina.execucao.adaptador.mensageria;
 
 import com.oficina.execucao.aplicacao.ProcessadorComandos;
+import com.oficina.execucao.aplicacao.rastreio.PropagadorTraco;
+import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.junit.jupiter.api.Test;
 import software.amazon.awssdk.services.sqs.SqsClient;
 import software.amazon.awssdk.services.sqs.model.*;
@@ -14,11 +17,27 @@ import static org.mockito.Mockito.*;
 class SqsComandosListenerTest {
     final SqsClient sqs = mock(SqsClient.class);
     final ProcessadorComandos processador = mock(ProcessadorComandos.class);
-    final SqsComandosListener listener = new SqsComandosListener(sqs, "https://sqs.local/000/execution-commands.fifo", processador);
+    final PropagadorTraco propagador = mock(PropagadorTraco.class);
+    final SqsComandosListener listener = new SqsComandosListener(sqs, "https://sqs.local/000/execution-commands.fifo", processador, propagador);
 
     static Message mensagem(String corpo, String grupo, String recibo) {
         return Message.builder().body(corpo).receiptHandle(recibo)
                 .attributes(Map.of(MessageSystemAttributeName.MESSAGE_GROUP_ID, grupo)).build();
+    }
+
+    @Test void pedeOsAtributosDeTraceEAceitaOCarrierAntesDaLogica() {
+        String traceparent = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01";
+        Message comTrace = mensagem("a", "os-1", "r1").toBuilder().messageAttributes(Map.of(
+                "traceparent", MessageAttributeValue.builder().dataType("String").stringValue(traceparent).build())).build();
+        when(sqs.receiveMessage(any(ReceiveMessageRequest.class)))
+                .thenReturn(ReceiveMessageResponse.builder().messages(comTrace).build());
+        assertThat(listener.receberUmLote()).isEqualTo(1);
+        var captor = ArgumentCaptor.forClass(ReceiveMessageRequest.class);
+        verify(sqs).receiveMessage(captor.capture());
+        assertThat(captor.getValue().messageAttributeNames()).containsExactlyInAnyOrder("traceparent", "tracestate", "newrelic");
+        InOrder ordem = inOrder(propagador, processador);
+        ordem.verify(propagador).aceitar(Map.of("traceparent", traceparent));
+        ordem.verify(processador).processar("a");
     }
 
     @Test void processaEApaga() {

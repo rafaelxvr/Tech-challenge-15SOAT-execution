@@ -14,6 +14,8 @@ import software.amazon.awssdk.services.dynamodb.model.ScalarAttributeType;
 
 /** Table schema used by tests and local runs; infra/ declares the same keys and indexes. */
 public final class DefinicaoTabelas {
+    /** Atributo do item de outbox com o carrier de trace (traceparent/tracestate/newrelic); só nos itens de resposta. */
+    public static final String ATRIBUTO_CARRIER = "carrierRastreio";
     public static final String INDICE_FILA = "fila-index";
     public static final String INDICE_OS = "os-index";
     public static final String INDICE_PENDENTES = "estado-disponivel-index";
