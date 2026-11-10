@@ -11,6 +11,7 @@ import com.oficina.execucao.aplicacao.IniciarReparo;
 import com.oficina.execucao.aplicacao.ProcessadorComandos;
 import com.oficina.execucao.aplicacao.porta.EnviadorMensagens;
 import com.oficina.execucao.aplicacao.porta.RegistroExecucoes;
+import com.oficina.execucao.aplicacao.rastreio.PropagadorTraco;
 import com.oficina.execucao.dominio.CapacidadeOficina;
 import com.oficina.execucao.dominio.Filiais;
 import com.oficina.execucao.mensagem.FabricaRespostas;
@@ -41,8 +42,9 @@ public class MensageriaConfiguration {
     }
 
     @Bean ProcessadorComandos processadorComandos(MapeadorMensagens mapeador, IniciarDiagnostico diagnostico,
-                                                  IniciarReparo reparo, CancelarExecucao cancelamento) {
-        return new ProcessadorComandos(mapeador, diagnostico, reparo, cancelamento);
+                                                  IniciarReparo reparo, CancelarExecucao cancelamento,
+                                                  PropagadorTraco propagador) {
+        return new ProcessadorComandos(mapeador, diagnostico, reparo, cancelamento, propagador);
     }
 
     @Bean EnviadorMensagens enviadorMensagens(ClientesAws clientes, ExecucaoProperties propriedades) {
@@ -60,8 +62,8 @@ public class MensageriaConfiguration {
     }
 
     @Bean SqsComandosListener sqsComandosListener(ClientesAws clientes, ExecucaoProperties propriedades,
-                                                  ProcessadorComandos processador) {
+                                                  ProcessadorComandos processador, PropagadorTraco propagador) {
         SqsEnviadorMensagens.validarFila(propriedades.mensageria().filaComandos());
-        return new SqsComandosListener(clientes.sqsRecepcao(), propriedades.mensageria().filaComandos(), processador);
+        return new SqsComandosListener(clientes.sqsRecepcao(), propriedades.mensageria().filaComandos(), processador, propagador);
     }
 }

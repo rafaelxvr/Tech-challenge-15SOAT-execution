@@ -4,6 +4,8 @@ import com.oficina.execucao.aplicacao.ConflitoConcorrenciaException;
 import com.oficina.execucao.aplicacao.porta.Gravacao;
 import com.oficina.execucao.aplicacao.porta.RegistroExecucoes;
 import com.oficina.execucao.aplicacao.porta.ResultadoGravacao;
+import com.oficina.execucao.aplicacao.rastreio.CarrierRastreio;
+import com.oficina.execucao.aplicacao.rastreio.PropagadorTraco;
 import com.oficina.execucao.dominio.DadosExecucao;
 import com.oficina.execucao.dominio.Execucao;
 import com.oficina.execucao.dominio.StatusExecucao;
@@ -40,12 +42,19 @@ public class DynamoRegistroExecucoes implements RegistroExecucoes {
     private final NomesTabelas tabelas;
     private final MapeadorMensagens mapeador;
     private final Clock clock;
+    private final PropagadorTraco propagador;
 
     public DynamoRegistroExecucoes(DynamoDbClient dynamo, NomesTabelas tabelas, MapeadorMensagens mapeador, Clock clock) {
+        this(dynamo, tabelas, mapeador, clock, PropagadorTraco.NENHUM);
+    }
+
+    public DynamoRegistroExecucoes(DynamoDbClient dynamo, NomesTabelas tabelas, MapeadorMensagens mapeador, Clock clock,
+                                   PropagadorTraco propagador) {
         this.dynamo = dynamo;
         this.tabelas = tabelas;
         this.mapeador = mapeador;
         this.clock = clock;
+        this.propagador = propagador;
     }
 
     @Override
@@ -154,6 +163,13 @@ public class DynamoRegistroExecucoes implements RegistroExecucoes {
         item.put("criadoEm", n(agora.toEpochMilli()));
         item.put("tipo", s(resposta.type()));
         item.put("corpo", s(corpo));
+        // Capturado aqui, dentro da transação consumidora ativa, para o poller continuar este trace em vez de abrir outro.
+        Map<String, String> carrier = CarrierRastreio.sanitizar(propagador.capturar());
+        if (!carrier.isEmpty()) {
+            Map<String, AttributeValue> mapa = new HashMap<>();
+            carrier.forEach((nome, valor) -> mapa.put(nome, s(valor)));
+            item.put(DefinicaoTabelas.ATRIBUTO_CARRIER, AttributeValue.fromM(mapa));
+        }
         return TransactWriteItem.builder().put(Put.builder().tableName(tabelas.outbox()).item(item)
                 .conditionExpression("attribute_not_exists(messageId)").build()).build();
     }

@@ -1,6 +1,7 @@
 package com.oficina.execucao.adaptador.mensageria;
 
 import com.oficina.execucao.aplicacao.ProcessadorComandos;
+import com.oficina.execucao.aplicacao.rastreio.PropagadorTraco;
 import com.oficina.execucao.support.LocalStackSupport;
 import org.junit.jupiter.api.Test;
 import software.amazon.awssdk.services.sqs.SqsClient;
@@ -49,7 +50,7 @@ class DlqRetryLocalStackTest extends LocalStackSupport {
                 QueueAttributeName.REDRIVE_POLICY, "{\"deadLetterTargetArn\":\"" + arn(dlq)
                         + "\",\"maxReceiveCount\":" + MAX_RECEBIMENTOS + "}"));
         doThrow(new IllegalStateException("veneno")).when(processador).processar("veneno");
-        var listener = new SqsComandosListener(sqs, comandos, processador);
+        var listener = new SqsComandosListener(sqs, comandos, processador, PropagadorTraco.NENHUM);
 
         enviar(comandos, "veneno", "os-1");
         enviar(comandos, "saudavel", "os-2");

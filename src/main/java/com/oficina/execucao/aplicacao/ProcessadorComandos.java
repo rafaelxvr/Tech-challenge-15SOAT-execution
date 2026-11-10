@@ -1,6 +1,7 @@
 package com.oficina.execucao.aplicacao;
 
 import com.oficina.execucao.aplicacao.porta.ResultadoGravacao;
+import com.oficina.execucao.aplicacao.rastreio.PropagadorTraco;
 import com.oficina.execucao.mensagem.Envelope;
 import com.oficina.execucao.mensagem.MapeadorMensagens;
 import com.oficina.execucao.mensagem.MensagemInvalidaException;
@@ -15,13 +16,21 @@ public class ProcessadorComandos {
     private final IniciarDiagnostico iniciarDiagnostico;
     private final IniciarReparo iniciarReparo;
     private final CancelarExecucao cancelarExecucao;
+    private final PropagadorTraco propagador;
 
     public ProcessadorComandos(MapeadorMensagens mapeador, IniciarDiagnostico iniciarDiagnostico,
                                IniciarReparo iniciarReparo, CancelarExecucao cancelarExecucao) {
+        this(mapeador, iniciarDiagnostico, iniciarReparo, cancelarExecucao, PropagadorTraco.NENHUM);
+    }
+
+    public ProcessadorComandos(MapeadorMensagens mapeador, IniciarDiagnostico iniciarDiagnostico,
+                               IniciarReparo iniciarReparo, CancelarExecucao cancelarExecucao,
+                               PropagadorTraco propagador) {
         this.mapeador = mapeador;
         this.iniciarDiagnostico = iniciarDiagnostico;
         this.iniciarReparo = iniciarReparo;
         this.cancelarExecucao = cancelarExecucao;
+        this.propagador = propagador;
     }
 
     public void processar(String corpo) {
@@ -30,6 +39,9 @@ public class ProcessadorComandos {
         try {
             MDC.put("correlation_id", comando.correlationId());
             if (comando.traceparent() != null) MDC.put("traceparent", comando.traceparent());
+            // Somente UUIDs: nenhum PII chega ao trace.
+            propagador.anotar("sagaId", comando.sagaId().toString());
+            propagador.anotar("correlationId", comando.correlationId());
             MDC.put("saga_id", comando.sagaId().toString());
             MDC.put("os_id", comando.osId().toString());
             ResultadoGravacao resultado = switch (comando.type()) {
