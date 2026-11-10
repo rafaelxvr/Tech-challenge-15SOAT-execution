@@ -3,6 +3,7 @@ package com.oficina.execucao.adaptador.mensageria;
 import com.oficina.execucao.adaptador.dynamo.DefinicaoTabelas;
 import com.oficina.execucao.adaptador.dynamo.NomesTabelas;
 import com.oficina.execucao.aplicacao.porta.EnviadorMensagens;
+import com.oficina.execucao.aplicacao.rastreio.CarrierRastreio;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
@@ -17,6 +18,7 @@ import software.amazon.awssdk.services.dynamodb.model.Update;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
 
@@ -78,7 +80,7 @@ public class PublicadorOutbox {
         String ack;
         try {
             ack = enviador.enviar(UUID.fromString(item.get("osId").s()), UUID.fromString(item.get("messageId").s()),
-                    item.get("corpo").s());
+                    item.get("corpo").s(), carrier(item));
             if (ack == null || ack.isBlank()) throw new IllegalStateException("Missing queue acknowledgement");
         } catch (RuntimeException e) {
             falhar(chave, Integer.parseInt(item.get("tentativas").n()), agora);
@@ -101,6 +103,15 @@ public class PublicadorOutbox {
         } catch (TransactionCanceledException outroPodJaMarcou) {
             return;
         }
+    }
+
+    /** Carrier gravado com a resposta na transação consumidora; ausente ou inseguro vira vazio, nunca uma raiz nova. */
+    private static Map<String, String> carrier(Map<String, AttributeValue> item) {
+        AttributeValue armazenado = item.get(DefinicaoTabelas.ATRIBUTO_CARRIER);
+        if (armazenado == null || !armazenado.hasM()) return Map.of();
+        Map<String, String> bruto = new LinkedHashMap<>();
+        armazenado.m().forEach((nome, valor) -> { if (valor.s() != null) bruto.put(nome, valor.s()); });
+        return CarrierRastreio.sanitizar(bruto);
     }
 
     private void falhar(Map<String, AttributeValue> chave, int tentativasLidas, Instant agora) {

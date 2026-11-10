@@ -19,6 +19,8 @@ import software.amazon.awssdk.services.sqs.SqsClient;
 import software.amazon.awssdk.services.sqs.model.MessageSystemAttributeName;
 import software.amazon.awssdk.services.sqs.model.ReceiveMessageRequest;
 
+import com.oficina.execucao.aplicacao.rastreio.PropagadorTraco;
+
 import java.time.*;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicReference;
@@ -80,15 +82,45 @@ class PublicadorOutboxTest extends LocalStackSupport {
         assertThat(item(r.messageId())).containsKeys("sqsMessageId", "expiraEm");
     }
 
+    @Test void carrierGravadoNaTransacaoDaRespostaEPublicadoComoAtributosSemCriarRaiz() {
+        String traceparent = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01";
+        Map<String, String> carrier = Map.of("traceparent", traceparent, "tracestate", "123@nr=0-0-1-2-3");
+        var comTrace = new DynamoRegistroExecucoes(dynamo, nomes, new MapeadorMensagens(), CLOCK, new PropagadorTraco() {
+            @Override public Map<String, String> capturar() { return carrier; }
+            @Override public void aceitar(Map<String, String> headers) { }
+            @Override public void anotar(String chave, String valor) { }
+        });
+        UUID os = UUID.randomUUID();
+        var e = new FabricaRespostas(CLOCK).responder(Fixtures.origem(), os, "ReparoIniciado", JsonNodeFactory.instance.objectNode());
+        comTrace.gravar(new Gravacao(null, null, List.of(), e));
+        AGORA.set(AGORA.get().plusMillis(1));
+        assertThat(item(e.messageId()).get(DefinicaoTabelas.ATRIBUTO_CARRIER).m()).containsOnlyKeys("traceparent", "tracestate");
+
+        drenar(new PublicadorOutbox(dynamo, nomes, new SqsEnviadorMensagens(sqs, fila), CLOCK, new BackoffPublicacao(b -> 0)));
+        var recebidas = sqs.receiveMessage(ReceiveMessageRequest.builder().queueUrl(fila).maxNumberOfMessages(10)
+                .waitTimeSeconds(2).messageAttributeNames("All").build()).messages();
+        assertThat(recebidas).filteredOn(m -> new MapeadorMensagens().ler(m.body()).messageId().equals(e.messageId()))
+                .singleElement().satisfies(m -> {
+                    assertThat(m.messageAttributes().get("traceparent").stringValue()).isEqualTo(traceparent);
+                    assertThat(m.messageAttributes().get("tracestate").stringValue()).isEqualTo("123@nr=0-0-1-2-3");
+                    assertThat(m.body()).doesNotContain("carrierRastreio");
+                });
+    }
+
+    @Test void respostaSemCarrierNaoGravaOAtributo() {
+        var r = resposta(UUID.randomUUID(), "ReparoIniciado");
+        assertThat(item(r.messageId())).doesNotContainKey(DefinicaoTabelas.ATRIBUTO_CARRIER);
+    }
+
     @Test void respostaPosteriorDaMesmaOsEsperaAnterior() {
         UUID os = UUID.randomUUID();
         var primeira = resposta(os, "ReparoIniciado");
         var segunda = resposta(os, "ExecucaoFinalizada");
         List<UUID> enviadas = new ArrayList<>();
-        var falhando = new PublicadorOutbox(dynamo, nomes, (o, id, corpo) -> { throw new IllegalStateException("x"); },
+        var falhando = new PublicadorOutbox(dynamo, nomes, (o, id, corpo, traco) -> { throw new IllegalStateException("x"); },
                 CLOCK, new BackoffPublicacao(b -> 0));
         while (item(primeira.messageId()).get("tentativas").n().equals("0")) falhando.publicarProximo();
-        var publicador = new PublicadorOutbox(dynamo, nomes, (o, id, corpo) -> { enviadas.add(id); return "ok-" + id; },
+        var publicador = new PublicadorOutbox(dynamo, nomes, (o, id, corpo, traco) -> { enviadas.add(id); return "ok-" + id; },
                 CLOCK, new BackoffPublicacao(b -> 0));
         drenar(publicador);
         assertThat(enviadas).doesNotContain(segunda.messageId());
@@ -100,7 +132,7 @@ class PublicadorOutboxTest extends LocalStackSupport {
 
     @Test void falhaNaoSobrescrevePublicadoPorOutroPod() {
         var r = resposta(UUID.randomUUID(), "ReparoIniciado");
-        var publicador = new PublicadorOutbox(dynamo, nomes, (o, id, corpo) -> {
+        var publicador = new PublicadorOutbox(dynamo, nomes, (o, id, corpo, traco) -> {
             dynamo.updateItem(b -> b.tableName(nomes.outbox())
                     .key(Map.of("messageId", AttributeValue.fromS(id.toString())))
                     .updateExpression("SET estado = :p").expressionAttributeValues(Map.of(":p", AttributeValue.fromS("PUBLISHED"))));
@@ -117,7 +149,7 @@ class PublicadorOutboxTest extends LocalStackSupport {
         var chave = Map.of("messageId", AttributeValue.fromS(DefinicaoTabelas.chaveFila(os.toString())));
         var antes = dynamo.getItem(b -> b.tableName(nomes.outbox()).consistentRead(true).key(chave)).item().get("fila").l();
         assertThat(antes).extracting(AttributeValue::s).containsExactly(primeira.messageId().toString(), segunda.messageId().toString());
-        drenar(new PublicadorOutbox(dynamo, nomes, (o, id, corpo) -> "ok-" + id, CLOCK, new BackoffPublicacao(b -> 0)));
+        drenar(new PublicadorOutbox(dynamo, nomes, (o, id, corpo, traco) -> "ok-" + id, CLOCK, new BackoffPublicacao(b -> 0)));
         assertThat(dynamo.getItem(b -> b.tableName(nomes.outbox()).consistentRead(true).key(chave)).item().get("fila").l()).isEmpty();
     }
 
@@ -130,7 +162,7 @@ class PublicadorOutboxTest extends LocalStackSupport {
                 .key(Map.of("messageId", AttributeValue.fromS(primeira.messageId().toString())))
                 .updateExpression("SET estado = :x").expressionAttributeValues(Map.of(":x", AttributeValue.fromS("INVISIVEL"))));
         List<UUID> enviadas = new ArrayList<>();
-        var publicador = new PublicadorOutbox(dynamo, nomes, (o, id, corpo) -> { enviadas.add(id); return "ok"; },
+        var publicador = new PublicadorOutbox(dynamo, nomes, (o, id, corpo, traco) -> { enviadas.add(id); return "ok"; },
                 CLOCK, new BackoffPublicacao(b -> 0));
         drenar(publicador);
         assertThat(enviadas).doesNotContain(segunda.messageId());
@@ -138,7 +170,7 @@ class PublicadorOutboxTest extends LocalStackSupport {
 
     @Test void falhaComTentativaDesatualizadaNaoRegride() {
         var r = resposta(UUID.randomUUID(), "ReparoIniciado");
-        var publicador = new PublicadorOutbox(dynamo, nomes, (o, id, corpo) -> {
+        var publicador = new PublicadorOutbox(dynamo, nomes, (o, id, corpo, traco) -> {
             dynamo.updateItem(b -> b.tableName(nomes.outbox()).key(Map.of("messageId", AttributeValue.fromS(id.toString())))
                     .updateExpression("SET tentativas = :t").expressionAttributeValues(Map.of(":t", AttributeValue.fromN("5"))));
             throw new IllegalStateException("x");
@@ -171,7 +203,7 @@ class PublicadorOutboxTest extends LocalStackSupport {
             AGORA.set(AGORA.get().plusMillis(1));
         }
         List<UUID> enviadas = new ArrayList<>();
-        var publicador = new PublicadorOutbox(dynamo, tabelasLocais, (o, id, corpo) -> { enviadas.add(id); return "ok"; },
+        var publicador = new PublicadorOutbox(dynamo, tabelasLocais, (o, id, corpo, traco) -> { enviadas.add(id); return "ok"; },
                 CLOCK, new BackoffPublicacao(b -> 0));
         drenar(publicador);
         assertThat(enviadas).containsExactlyInAnyOrderElementsOf(livres);

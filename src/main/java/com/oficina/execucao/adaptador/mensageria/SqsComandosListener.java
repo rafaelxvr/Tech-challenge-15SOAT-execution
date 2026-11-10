@@ -1,6 +1,9 @@
 package com.oficina.execucao.adaptador.mensageria;
 
+import com.newrelic.api.agent.Trace;
 import com.oficina.execucao.aplicacao.ProcessadorComandos;
+import com.oficina.execucao.aplicacao.rastreio.CarrierRastreio;
+import com.oficina.execucao.aplicacao.rastreio.PropagadorTraco;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
@@ -9,6 +12,8 @@ import software.amazon.awssdk.services.sqs.SqsClient;
 import software.amazon.awssdk.services.sqs.model.*;
 
 import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -19,26 +24,29 @@ public class SqsComandosListener implements SmartLifecycle {
     private final SqsClient sqs;
     private final String fila;
     private final ProcessadorComandos processador;
+    private final PropagadorTraco propagador;
     private ExecutorService executor;
     private volatile boolean rodando;
 
-    public SqsComandosListener(SqsClient sqs, String fila, ProcessadorComandos processador) {
+    public SqsComandosListener(SqsClient sqs, String fila, ProcessadorComandos processador,
+                              PropagadorTraco propagador) {
         this.sqs = sqs;
         this.fila = fila;
         this.processador = processador;
+        this.propagador = propagador;
     }
 
     public int receberUmLote() {
         var mensagens = sqs.receiveMessage(ReceiveMessageRequest.builder().queueUrl(fila).maxNumberOfMessages(10)
                 .waitTimeSeconds(10).messageSystemAttributeNames(MessageSystemAttributeName.MESSAGE_GROUP_ID)
-                .build()).messages();
+                .messageAttributeNames(CarrierRastreio.NOMES).build()).messages();
         Set<String> gruposComFalha = new HashSet<>();
         int processadas = 0;
         for (Message mensagem : mensagens) {
             String grupo = mensagem.attributes().get(MessageSystemAttributeName.MESSAGE_GROUP_ID);
             if (grupo != null && gruposComFalha.contains(grupo)) continue;
             try {
-                processador.processar(mensagem.body());
+                processarNaTransacao(mensagem);
                 sqs.deleteMessage(DeleteMessageRequest.builder().queueUrl(fila).receiptHandle(mensagem.receiptHandle()).build());
                 processadas++;
             } catch (RuntimeException e) {
@@ -47,6 +55,21 @@ public class SqsComandosListener implements SmartLifecycle {
             }
         }
         return processadas;
+    }
+
+    /** Uma transação New Relic por mensagem, ligada ao trace do produtor antes de qualquer lógica de negócio. */
+    @Trace(dispatcher = true)
+    void processarNaTransacao(Message mensagem) {
+        propagador.aceitar(carrier(mensagem));
+        processador.processar(mensagem.body());
+    }
+
+    private static Map<String, String> carrier(Message mensagem) {
+        Map<String, String> headers = new LinkedHashMap<>();
+        mensagem.messageAttributes().forEach((nome, atributo) -> {
+            if (atributo != null && atributo.stringValue() != null) headers.put(nome, atributo.stringValue());
+        });
+        return headers;
     }
 
     private static void registrar(String evento, RuntimeException e, String texto) {

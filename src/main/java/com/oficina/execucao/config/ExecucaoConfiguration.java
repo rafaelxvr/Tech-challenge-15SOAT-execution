@@ -4,6 +4,7 @@ import com.oficina.execucao.adaptador.dynamo.DefinicaoTabelas;
 import com.oficina.execucao.adaptador.dynamo.DynamoRegistroExecucoes;
 import com.oficina.execucao.adaptador.dynamo.NomesTabelas;
 import com.oficina.execucao.aplicacao.AcoesMecanico;
+import com.oficina.execucao.aplicacao.rastreio.PropagadorTraco;
 import com.oficina.execucao.aplicacao.ConsultasExecucao;
 import com.oficina.execucao.aplicacao.porta.RegistroExecucoes;
 import com.oficina.execucao.dominio.CapacidadeOficina;
@@ -43,9 +44,9 @@ public class ExecucaoConfiguration {
 
     /** Local/compose and tests create tables on start; cloud tables come from Terraform. */
     @Bean RegistroExecucoes registroExecucoes(ClientesAws clientes, NomesTabelas nomes, MapeadorMensagens mapeador,
-                                              Clock clock, ExecucaoProperties propriedades) {
+                                              Clock clock, ExecucaoProperties propriedades, PropagadorTraco propagador) {
         if (propriedades.dynamodb().criarTabelas()) DefinicaoTabelas.criarSeAusente(clientes.dynamo(), nomes);
-        return new DynamoRegistroExecucoes(clientes.dynamo(), nomes, mapeador, clock);
+        return new DynamoRegistroExecucoes(clientes.dynamo(), nomes, mapeador, clock, propagador);
     }
 
     @Bean AcoesMecanico acoesMecanico(RegistroExecucoes registro, FabricaRespostas respostas, CapacidadeOficina capacidade,
