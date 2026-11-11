@@ -13,4 +13,4 @@ patches:
 images:
   - name: oficina-execution
     newName: ghcr.io/rafaelxvr/oficina-execution-service
-    digest: sha256:f0f9dfe6afdfaa800bd9f8914db6c72f05fec456f2cf888ca71dc981ca2557e7
+    digest: sha256:e3832274dc29b5e32174bdffeec4c2e50bd05d481107ec8770d964e16fb3af18
