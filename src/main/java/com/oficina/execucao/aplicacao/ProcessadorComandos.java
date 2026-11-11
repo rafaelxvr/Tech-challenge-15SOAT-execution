@@ -10,7 +10,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 
+import java.util.regex.Pattern;
+
 public class ProcessadorComandos {
+    /** Valor seguro para atributo de trace: ASCII imprimível curto, sem espaços (UUID ou id canônico). */
+    private static final Pattern ID_CANONICO = Pattern.compile("[A-Za-z0-9._:-]{1,64}");
     private static final Logger LOG = LoggerFactory.getLogger(ProcessadorComandos.class);
     private final MapeadorMensagens mapeador;
     private final IniciarDiagnostico iniciarDiagnostico;
@@ -39,9 +43,7 @@ public class ProcessadorComandos {
         try {
             MDC.put("correlation_id", comando.correlationId());
             if (comando.traceparent() != null) MDC.put("traceparent", comando.traceparent());
-            // Somente UUIDs: nenhum PII chega ao trace.
-            propagador.anotar("sagaId", comando.sagaId().toString());
-            propagador.anotar("correlationId", comando.correlationId());
+            anotarTransacao(comando);
             MDC.put("saga_id", comando.sagaId().toString());
             MDC.put("os_id", comando.osId().toString());
             ResultadoGravacao resultado = switch (comando.type()) {
@@ -59,6 +61,21 @@ public class ProcessadorComandos {
             MDC.remove("traceparent");
             MDC.remove("saga_id");
             MDC.remove("os_id");
+        }
+    }
+
+    /** Anota a transação ativa antes da lógica de negócio; só IDs limitados e nunca falha o processamento. */
+    private void anotarTransacao(Envelope comando) {
+        anotar("sagaId", comando.sagaId().toString());
+        String correlacao = comando.correlationId();
+        if (ID_CANONICO.matcher(correlacao).matches()) anotar("correlationId", correlacao);
+    }
+
+    private void anotar(String chave, String valor) {
+        try {
+            propagador.anotar(chave, valor);
+        } catch (RuntimeException e) {
+            // Observabilidade é best effort: não pode afetar o negócio.
         }
     }
 }
